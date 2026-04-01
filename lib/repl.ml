@@ -82,7 +82,7 @@ let print_banner ~model ~auto_approve =
 
   let welcome = Printf.sprintf "Welcome back %s!" user in
   let info_line = Printf.sprintf "%s \xC2\xB7 %s%s" mode_str model branch_str in
-  let sprite = [| "  \xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88" |] in
+  let _old_sprite = [| "  \xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88" |] in
 
   (* Use full terminal width for the card *)
   let card_w = term_w - 2 in  (* 1 col margin each side *)
@@ -94,62 +94,88 @@ let print_banner ~model ~auto_approve =
     Printf.printf "%s %s\027[%dG%s\n"
       (y "\xE2\x94\x82") content col_right (y "\xE2\x94\x82")
   in
-  let blank () = card_line "" in
+  let _blank () = card_line "" in
 
   let label = "Camel Code v0.1" in
   let label_dashes = card_w - String.length label - 4 in
+  let div_col = left_w + 1 in  (* vertical divider column *)
 
   (* Right panel content *)
-  let tip_header = "Tips" in
-  let tip_text = "/help for commands" in
-  let activity_header = "Recent activity" in
   let sessions = Session.list_sessions () in
   let activity_text = match sessions with
-    | s :: _ -> Printf.sprintf "%d messages · %s" s.message_count (String.sub s.id 0 (min 8 (String.length s.id)))
+    | s :: _ -> Printf.sprintf "%d msgs · %s" s.message_count (String.sub s.id 0 (min 8 (String.length s.id)))
     | [] -> "No recent sessions"
+  in
+
+  (* Bigger camel sprite — 5 rows with face *)
+  let sprite = [|
+    "   \xE2\x96\x88\xE2\x96\x88  \xE2\x96\x88\xE2\x96\x88";
+    "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88";
+    "  \xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88";
+    "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88";
+    "   \xE2\x96\x88\xE2\x96\x88  \xE2\x96\x88\xE2\x96\x88";
+  |] in
+
+  (* Left row: content centered in left panel, with divider + right content *)
+  let left_row ?(right="") content =
+    Printf.printf "%s %s\027[%dG%s%s\027[%dG%s\n"
+      (y "\xE2\x94\x82") content
+      div_col (y "\xE2\x94\x82") right
+      col_right (y "\xE2\x94\x82")
   in
 
   Printf.printf "\n";
 
-  (* Top: ╭─ label ───╮ *)
+  (* Top border *)
   Printf.printf "%s %s %s%s\n"
     (y "\xE2\x94\x8C\xE2\x94\x80")
     (bold label)
     (y (repeat_char "\xE2\x94\x80" (max 1 label_dashes)))
     (y "\xE2\x94\x90");
 
-  (* Row 1: blank | tip header *)
-  let r1_right = Printf.sprintf "%s" (bold (yellow tip_header)) in
-  Printf.printf "%s %*s%s\027[%dG%s\n"
-    (y "\xE2\x94\x82") left_w "" r1_right col_right (y "\xE2\x94\x82");
+  (* Row 1: blank | Tips header *)
+  left_row ~right:(Printf.sprintf " %s" (bold (yellow "Tips for getting started"))) "";
 
-  (* Row 2: welcome | tip text *)
+  (* Row 2: Welcome | tip line 1 *)
   let wpad = (left_w - String.length welcome) / 2 in
-  Printf.printf "%s %*s%s\027[%dG%s\027[%dG%s\n"
-    (y "\xE2\x94\x82") wpad "" (bold welcome) (left_w + 1) (dim tip_text) col_right (y "\xE2\x94\x82");
+  left_row ~right:(Printf.sprintf " %s" (dim "/help for commands"))
+    (Printf.sprintf "%*s%s" wpad "" (bold welcome));
 
-  blank ();
+  (* Row 3: blank | tip line 2 *)
+  left_row ~right:(Printf.sprintf " %s" (dim "/cost for token usage")) "";
 
-  (* Row 4-6: sprite | activity header + text *)
-  let spad = (left_w - 8) / 2 in
-  Printf.printf "%s %*s%s\027[%dG%s\027[%dG%s\n"
-    (y "\xE2\x94\x82") spad "" (sand sprite.(0)) (left_w + 1) (bold (yellow activity_header)) col_right (y "\xE2\x94\x82");
-  Printf.printf "%s %*s%s\027[%dG%s\027[%dG%s\n"
-    (y "\xE2\x94\x82") spad "" (sand sprite.(1)) (left_w + 1) (dim activity_text) col_right (y "\xE2\x94\x82");
-  Printf.printf "%s %*s%s\027[%dG%s\n"
-    (y "\xE2\x94\x82") spad "" (sand sprite.(2)) col_right (y "\xE2\x94\x82");
+  (* Divider in right panel *)
+  let right_w = card_w - left_w - 2 in
+  Printf.printf "%s \027[%dG%s%s\027[%dG%s\n"
+    (y "\xE2\x94\x82")
+    div_col (y "\xE2\x94\x82")
+    (y (repeat_char "\xE2\x94\x80" right_w))
+    col_right (y "\xE2\x94\x82");
 
-  blank ();
+  (* Sprite rows | Recent activity *)
+  let spad = (left_w - 10) / 2 in
+  left_row ~right:(Printf.sprintf " %s" (bold (yellow "Recent activity")))
+    (Printf.sprintf "%*s%s" spad "" (sand sprite.(0)));
+  left_row ~right:(Printf.sprintf " %s" (dim activity_text))
+    (Printf.sprintf "%*s%s" spad "" (sand sprite.(1)));
+  left_row
+    (Printf.sprintf "%*s%s" spad "" (sand sprite.(2)));
+  left_row
+    (Printf.sprintf "%*s%s" spad "" (sand sprite.(3)));
+  left_row
+    (Printf.sprintf "%*s%s" spad "" (sand sprite.(4)));
 
-  (* Model info *)
+  left_row "";
+
+  (* Model info centered in left panel *)
   let ipad = (left_w - String.length info_line) / 2 in
-  card_line (Printf.sprintf "%*s%s" ipad "" (yellow info_line));
+  left_row (Printf.sprintf "%*s%s" ipad "" (yellow info_line));
 
-  (* Cwd *)
+  (* Cwd centered in left panel *)
   let cpad = (left_w - String.length short_cwd) / 2 in
-  card_line (Printf.sprintf "%*s%s" cpad "" (dim short_cwd));
+  left_row (Printf.sprintf "%*s%s" cpad "" (dim short_cwd));
 
-  (* Bottom: ╰───╯ *)
+  (* Bottom border *)
   Printf.printf "%s%s\n"
     (y (Printf.sprintf "\xE2\x94\x94%s" (repeat_char "\xE2\x94\x80" (card_w - 1))))
     (y "\xE2\x94\x98");
