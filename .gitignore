@@ -7,3 +7,10 @@ _opam/
 *.native
 .DS_Store
 .camel-home/
+.camel/
+*.token
+*.key
+*.pem
+.env
+.env.*
+config.json

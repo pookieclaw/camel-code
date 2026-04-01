@@ -2,7 +2,9 @@
 
 > *Two humps, zero runtime.*
 
-A full OCaml rewrite of the [Claude Code](https://docs.anthropic.com/en/docs/claude-code) CLI — the AI coding assistant from Anthropic. Built with OCaml 5, native compilation, and zero JavaScript runtime.
+An unofficial, independent terminal AI coding assistant written in OCaml. Inspired by the UX patterns of modern AI CLI tools. Uses the [Anthropic Messages API](https://docs.anthropic.com/en/api/messages) with your own API key.
+
+**This project is not affiliated with, endorsed by, or associated with Anthropic in any way.** "Claude" is a trademark of Anthropic. This is a personal hobby project.
 
 ## Quick Start
 
@@ -16,7 +18,7 @@ echo '{"api_key": "sk-ant-..."}' > ~/.camel/config.json
 # Install the binary
 dune install
 
-# Run it — just like claude
+# Run it
 camel
 ```
 
@@ -138,35 +140,23 @@ Add to `~/.camel/settings.json`:
 
 ## Architecture
 
-| Layer | Claude Code (TypeScript) | Camel Code (OCaml) |
-|-------|--------------------------|---------------------|
-| TUI | React + custom Ink fork | ANSI direct rendering |
-| State | Zustand-like store | Mutable refs |
-| Concurrency | async/await + generators | Unix processes |
-| Types | TypeScript + Zod | Algebraic data types |
-| Tools | buildTool() + interfaces | First-class modules |
-| Build | Bun / esbuild | dune |
-| Binary | Node.js runtime | Native (zero runtime) |
-
-## Build Phases
-
-| Phase | Name | Status |
-|-------|------|--------|
-| 0 | Repo & DevContainer Setup | Done |
-| 1 | The Talking Camel — API streaming + REPL | Done |
-| 2 | The Camel Gets Tools — Agentic tool loop | Done |
-| 3 | The Camel Gets a Face — Full TUI | Done |
-| 4 | The Camel Remembers — Sessions & config | Done |
-| 5 | The Camel Connects — MCP, agents, hooks | Done |
-| 6 | The Camel Gets Vim Legs — Vim & keybindings | Done |
-| 7 | The Camel Goes Remote — OAuth & bridge | Done |
-| 8 | The Polished Camel — Full feature parity | Done |
-
-**52 OCaml files, ~4,200 LOC** — 0.8% of the original 513K LOC TypeScript codebase.
+| Layer | Approach |
+|-------|----------|
+| TUI | ANSI direct rendering |
+| State | Mutable refs |
+| Concurrency | Unix processes |
+| Types | Algebraic data types |
+| Tools | First-class modules |
+| Build | dune |
+| Binary | Native (zero runtime) |
 
 ## Why?
 
-For fun. And because rewriting 513K lines of TypeScript in a language with algebraic data types and a 100ms startup time seemed like a good idea at the time.
+A hobby project to explore building an AI coding assistant in OCaml — leveraging algebraic data types, first-class modules, and native compilation for fast startup.
+
+## Disclaimer
+
+This project is **not affiliated with, endorsed by, or associated with Anthropic, PBC.** It is an independent, open-source project that uses the publicly documented [Anthropic Messages API](https://docs.anthropic.com/en/api/messages). "Claude" is a trademark of Anthropic. All trademarks belong to their respective owners.
 
 ## License
 

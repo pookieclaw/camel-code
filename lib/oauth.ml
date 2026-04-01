@@ -41,12 +41,16 @@ type token = {
   expires_at : float;
 }
 
+(* OAuth is disabled — Camel Code does not have an authorized Anthropic
+   OAuth client ID. Use API keys instead (ANTHROPIC_API_KEY env var or
+   ~/.camel/config.json). This stub remains for future use if/when an
+   official client registration is obtained. *)
 let default_config = {
-  client_id = "camel-code";
-  auth_url = "https://auth.anthropic.com/oauth2/authorize";
-  token_url = "https://auth.anthropic.com/oauth2/token";
-  redirect_uri = "http://localhost:19280/callback";
-  scope = "user:inference";
+  client_id = "";
+  auth_url = "";
+  token_url = "";
+  redirect_uri = "";
+  scope = "";
 }
 
 (** Save token to credential store. *)
@@ -129,6 +133,15 @@ let exchange_code ?(config = default_config) ~code ~code_verifier () =
 
 (** Login flow — opens browser, listens for callback. *)
 let login () =
+  Printf.printf "OAuth login is not available.\n";
+  Printf.printf "Camel Code does not have an authorized Anthropic OAuth client.\n";
+  Printf.printf "\nUse an API key instead:\n";
+  Printf.printf "  export ANTHROPIC_API_KEY=sk-ant-...\n";
+  Printf.printf "  # or\n";
+  Printf.printf "  echo '{\"api_key\": \"sk-ant-...\"}' > ~/.camel/config.json\n";
+  None
+
+let _login_disabled () =
   let code_verifier = random_string 64 in
   let auth_url = build_auth_url ~code_verifier () in
   Printf.printf "Opening browser for authentication...\n";

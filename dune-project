@@ -5,7 +5,7 @@
 (generate_opam_files true)
 
 (source
- (uri "http://gitea.chill/liam/camel-code"))
+ (github liam/camel-code))
 
 (authors "Liam Nguyen")
 
@@ -13,8 +13,8 @@
 
 (package
  (name camel)
- (synopsis "OCaml rewrite of Claude Code CLI")
- (description "Two humps, zero runtime. A full OCaml port of the Claude Code terminal assistant.")
+ (synopsis "Terminal AI coding assistant in OCaml")
+ (description "An independent terminal AI coding assistant built with OCaml 5. Uses the Anthropic Messages API. Not affiliated with Anthropic.")
  (depends
   (ocaml (>= 5.1))
   (dune (>= 3.16))

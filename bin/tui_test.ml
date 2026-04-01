@@ -61,7 +61,7 @@ let () =
   Printf.printf "\n";
 
   (* Test 7: Tree connectors *)
-  Printf.printf "7. Tree connectors (Claude-style responses):\n";
+  Printf.printf "7. Tree connectors (response display):\n";
   Printf.printf "   \027[48;5;236m\027[37m \xE2\x9D\xAF /plan                                              \027[0m\n";
   Printf.printf "     \xE2\x94\x94 \027[2mEnabled plan mode\027[0m\n";
   Printf.printf "\n";

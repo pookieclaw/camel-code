@@ -30,7 +30,7 @@ let build ~model ~tools =
   let parts = ref [] in
   let add s = parts := s :: !parts in
 
-  add "You are Camel Code, an OCaml-powered AI coding assistant.";
+  add "You are an AI coding assistant running in the Camel Code terminal.";
   add (Printf.sprintf "You are powered by %s." model);
   add (Printf.sprintf "Today's date is %s." (current_date ()));
 

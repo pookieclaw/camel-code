@@ -1,6 +1,7 @@
 # Camel Code
 
-OCaml rewrite of Claude Code CLI. Binary: `camel`.
+An independent OCaml terminal AI coding assistant. Binary: `camel`.
+Not affiliated with Anthropic.
 
 ## Build
 
@@ -33,7 +34,7 @@ test/         Alcotest test suite
 
 ## Architecture
 
-This is a phased rewrite of Claude Code (TypeScript/React/Ink) into OCaml using:
+Built with:
 - **lwd** for reactive UI (replaces React reconciler + virtual DOM)
 - **nottui + notty** for terminal rendering (replaces Ink)
 - **Eio** for structured concurrency (replaces async/await + generators)
