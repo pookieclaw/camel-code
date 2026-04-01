@@ -28,17 +28,17 @@ let register_mcp_tools tools =
 let all_tools_with_mcp () =
   all_tools @ !mcp_tools
 
-(** Find a tool by name. *)
+(** Find a tool by name (searches built-in + MCP). *)
 let find_tool name =
   List.find_opt (fun (module T : S) ->
     String.lowercase_ascii T.name = String.lowercase_ascii name
-  ) all_tools
+  ) (all_tools @ !mcp_tools)
 
-(** Get all tool names. *)
+(** Get all tool names (built-in + MCP). *)
 let tool_names () =
-  List.map (fun (module T : S) -> T.name) all_tools
+  List.map (fun (module T : S) -> T.name) (all_tools @ !mcp_tools)
 
-(** Convert tools to API JSON schema format for the messages API. *)
+(** Convert tools to API JSON schema format (built-in + MCP). *)
 let tools_to_json () =
   List.map (fun (module T : S) ->
     `Assoc [
@@ -46,4 +46,4 @@ let tools_to_json () =
       ("description", `String T.description);
       ("input_schema", T.input_schema);
     ]
-  ) all_tools
+  ) (all_tools @ !mcp_tools)

@@ -1,6 +1,8 @@
 (** OAuth 2.0 PKCE flow for Anthropic authentication. *)
 
 (** Generate a random string for PKCE. *)
+let () = Random.self_init ()
+
 let random_string len =
   let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" in
   let buf = Buffer.create len in

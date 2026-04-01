@@ -64,14 +64,19 @@ let stream ~(config : Config.t) ~messages ?(system_prompt = None) ~on_event () =
   output_string oc body;
   close_out oc;
 
+  (* Write curl config to file to keep API key out of ps output *)
+  let cfg_tmp = Filename.temp_file "camel_cfg" ".txt" in
+  let coc = open_out cfg_tmp in
+  Printf.fprintf coc "header = \"x-api-key: %s\"\n" config.api_key;
+  Printf.fprintf coc "header = \"anthropic-version: %s\"\n" Config.api_version;
+  Printf.fprintf coc "header = \"content-type: application/json\"\n";
+  Printf.fprintf coc "header = \"accept: text/event-stream\"\n";
+  close_out coc;
+  Unix.chmod cfg_tmp 0o600;
+
   let cmd = Printf.sprintf
-    "curl -sN -X POST '%s' \
-     -H 'x-api-key: %s' \
-     -H 'anthropic-version: %s' \
-     -H 'content-type: application/json' \
-     -H 'accept: text/event-stream' \
-     -d @%s"
-    url config.api_key Config.api_version tmp
+    "curl -sN -X POST -K %s -d @%s %s"
+    (Filename.quote cfg_tmp) (Filename.quote tmp) (Filename.quote url)
   in
 
   let ic = Unix.open_process_in cmd in
@@ -134,6 +139,7 @@ let stream ~(config : Config.t) ~messages ?(system_prompt = None) ~on_event () =
   current_curl_pid := None;
   ignore (Unix.close_process_in ic);
   (try Sys.remove tmp with _ -> ());
+  (try Sys.remove cfg_tmp with _ -> ());
 
   let err = Buffer.contents error_buf in
   if String.length err > 0 then

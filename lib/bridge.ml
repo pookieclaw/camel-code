@@ -26,10 +26,10 @@ let create ~url = {
 let connect t =
   t.state <- Connecting;
   let cmd = Printf.sprintf
-    "curl -s -X POST '%s/api/sessions' \
+    "curl -s -X POST %s \
      -H 'Content-Type: application/json' \
      -d '{\"client\":\"camel-code\",\"version\":\"%s\"}' 2>/dev/null"
-    t.url Camel.version
+    (Filename.quote (t.url ^ "/api/sessions")) Camel.version
   in
   let ic = Unix.open_process_in cmd in
   let buf = Buffer.create 256 in
@@ -61,10 +61,10 @@ let send_message t msg =
     output_string oc body;
     close_out oc;
     let cmd = Printf.sprintf
-      "curl -s -X POST '%s/api/messages' \
+      "curl -s -X POST %s \
        -H 'Content-Type: application/json' \
        -d @%s 2>/dev/null"
-      t.url tmp
+      (Filename.quote (t.url ^ "/api/messages")) tmp
     in
     let _result = Sys.command cmd in
     Sys.remove tmp;
@@ -76,8 +76,8 @@ let poll_messages t =
   match t.state, t.session_token with
   | Connected, Some token ->
     let cmd = Printf.sprintf
-      "curl -s '%s/api/messages?token=%s' 2>/dev/null"
-      t.url token
+      "curl -s %s 2>/dev/null"
+      (Filename.quote (Printf.sprintf "%s/api/messages?token=%s" t.url token))
     in
     let ic = Unix.open_process_in cmd in
     let buf = Buffer.create 1024 in

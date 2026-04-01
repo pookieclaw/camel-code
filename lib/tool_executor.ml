@@ -77,7 +77,11 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
       Printf.printf "  %s" (dim "running...");
       flush stdout;
       let t0 = Unix.gettimeofday () in
-      let result = T.execute ~input ~cwd in
+      let result =
+        try T.execute ~input ~cwd
+        with exn ->
+          Tool_intf.{ output = Printf.sprintf "Tool crashed: %s" (Printexc.to_string exn); is_error = true }
+      in
       let elapsed = Unix.gettimeofday () -. t0 in
       Printf.printf "\r\027[K";  (* Clear spinner line *)
 

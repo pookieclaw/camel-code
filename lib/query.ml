@@ -40,14 +40,18 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
   output_string oc body;
   close_out oc;
 
+  let cfg_tmp = Filename.temp_file "camel_cfg" ".txt" in
+  let coc = open_out cfg_tmp in
+  Printf.fprintf coc "header = \"x-api-key: %s\"\n" config.api_key;
+  Printf.fprintf coc "header = \"anthropic-version: %s\"\n" Config.api_version;
+  Printf.fprintf coc "header = \"content-type: application/json\"\n";
+  Printf.fprintf coc "header = \"accept: text/event-stream\"\n";
+  close_out coc;
+  Unix.chmod cfg_tmp 0o600;
+
   let cmd = Printf.sprintf
-    "curl -sN -X POST '%s' \
-     -H 'x-api-key: %s' \
-     -H 'anthropic-version: %s' \
-     -H 'content-type: application/json' \
-     -H 'accept: text/event-stream' \
-     -d @%s"
-    url config.api_key Config.api_version tmp
+    "curl -sN -X POST -K %s -d @%s %s"
+    (Filename.quote cfg_tmp) (Filename.quote tmp) (Filename.quote url)
   in
 
   let ic = Unix.open_process_in cmd in
@@ -128,6 +132,7 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
   Client.current_curl_pid := None;
   ignore (Unix.close_process_in ic);
   (try Sys.remove tmp with _ -> ());
+  (try Sys.remove cfg_tmp with _ -> ());
 
   let err = Buffer.contents error_buf in
   if String.length err > 0 then begin
@@ -137,15 +142,16 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
 
   (* Finalize and fix tool names *)
   let (msg, stop_reason, usage) = Streaming.finalize acc in
-  let fixed_content = List.mapi (fun _i block ->
+  let tool_idx = ref 0 in
+  let fixed_content = List.map (fun block ->
     match block with
     | Message.ToolUse { id; name = _; input } ->
       let real_name =
-        Hashtbl.fold (fun _idx n found ->
-          match found with Some _ -> found | None -> Some n
-        ) tool_name_map None
-        |> Option.value ~default:"unknown"
+        match Hashtbl.find_opt tool_name_map !tool_idx with
+        | Some n -> n
+        | None -> "unknown"
       in
+      incr tool_idx;
       Message.ToolUse { id; name = real_name; input }
     | other -> other
   ) msg.content in
