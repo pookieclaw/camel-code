@@ -80,7 +80,7 @@ let render_message (msg : Message.message) ~cols =
         else content in
         if is_error then fg_red preview
         else dim preview
-      | Message.Thinking { thinking } ->
+      | Message.Thinking thinking ->
         dim (Printf.sprintf "[thinking: %s]"
           (if String.length thinking > 100 then
             String.sub thinking 0 100 ^ "..."

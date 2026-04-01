@@ -17,7 +17,7 @@ and content_delta =
 
 let parse_stop_reason = function
   | "end_turn" -> Some Message.EndTurn
-  | "tool_use" -> Some Message.ToolUse
+  | "tool_use" -> Some Message.ToolUse_stop
   | "max_tokens" -> Some Message.MaxTokens
   | "stop_sequence" -> Some Message.StopSequence
   | _ -> None
@@ -122,7 +122,7 @@ let finalize acc =
       let tool_id = Option.value id ~default:"unknown" in
       (* tool name is stored in ContentBlockStart, extract from accumulated JSON *)
       Some (Message.ToolUse { id = tool_id; name = "unknown"; input })
-    | "thinking" -> Some (Message.Thinking { thinking = text })
+    | "thinking" -> Some (Message.Thinking text)
     | _ -> None
   ) sorted in
   (Message.{ role = Assistant; content }, acc.stop_reason, acc.usage)

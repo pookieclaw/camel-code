@@ -2,18 +2,30 @@
 
 type role = User | Assistant | System
 
+type tool_use_data = {
+  id : string;
+  name : string;
+  input : Yojson.Safe.t;
+}
+
+type tool_result_data = {
+  tool_use_id : string;
+  content : string;
+  is_error : bool;
+}
+
 type content_block =
   | Text of string
-  | ToolUse of { id : string; name : string; input : Yojson.Safe.t }
-  | ToolResult of { tool_use_id : string; content : string; is_error : bool }
-  | Thinking of { thinking : string }
+  | ToolUse of tool_use_data
+  | ToolResult of tool_result_data
+  | Thinking of string
 
 type message = {
   role : role;
   content : content_block list;
 }
 
-type stop_reason = EndTurn | ToolUse | MaxTokens | StopSequence
+type stop_reason = EndTurn | ToolUse_stop | MaxTokens | StopSequence
 
 type usage = {
   input_tokens : int;
@@ -43,9 +55,9 @@ let role_to_string = function
 
 let content_block_text = function
   | Text s -> s
-  | Thinking { thinking } -> thinking
-  | ToolUse { name; _ } -> Printf.sprintf "[tool_use: %s]" name
-  | ToolResult { content; _ } -> content
+  | Thinking s -> s
+  | ToolUse t -> Printf.sprintf "[tool_use: %s]" t.name
+  | ToolResult t -> t.content
 
 let message_text msg =
   msg.content
@@ -59,22 +71,22 @@ let message_to_json msg =
     |> List.map (function
       | Text s ->
         `Assoc [("type", `String "text"); ("text", `String s)]
-      | ToolUse { id; name; input } ->
+      | ToolUse t ->
         `Assoc [
           ("type", `String "tool_use");
-          ("id", `String id);
-          ("name", `String name);
-          ("input", input);
+          ("id", `String t.id);
+          ("name", `String t.name);
+          ("input", t.input);
         ]
-      | ToolResult { tool_use_id; content; is_error } ->
+      | ToolResult t ->
         `Assoc [
           ("type", `String "tool_result");
-          ("tool_use_id", `String tool_use_id);
-          ("content", `String content);
-          ("is_error", `Bool is_error);
+          ("tool_use_id", `String t.tool_use_id);
+          ("content", `String t.content);
+          ("is_error", `Bool t.is_error);
         ]
-      | Thinking { thinking } ->
-        `Assoc [("type", `String "thinking"); ("thinking", `String thinking)])
+      | Thinking s ->
+        `Assoc [("type", `String "thinking"); ("thinking", `String s)])
   in
   `Assoc [("role", `String role); ("content", `List content)]
 
