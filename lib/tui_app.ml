@@ -3,15 +3,14 @@
     Manages the main event loop: read input, query API, render screen. *)
 
 (** Run the TUI REPL. Falls back to basic REPL if not a terminal. *)
-let run ~(config : Config.t) ~auto_approve =
+let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   let is_tty = Unix.isatty Unix.stdin in
   if not is_tty then begin
-    (* Fallback to basic REPL for non-terminal *)
-    Repl.run ~config ~auto_approve
+    Repl.run ~config ~auto_approve ~initial_messages ()
   end else begin
     let layout = Tui_layout.create () in
     let ct = Cost_tracker.create ~model:config.model in
-    let msgs = ref [] in
+    let msgs = ref initial_messages in
 
     let old_termios = Tui_ansi.enable_raw_mode () in
     Tui_ansi.enter_alt_screen ();
