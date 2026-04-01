@@ -18,14 +18,19 @@ let cmd_help = {
   description = "Show available commands";
   execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
     let help_text =
-      "/help     - Show this help\n\
-       /clear    - Clear conversation\n\
-       /compact  - Summarize old messages\n\
-       /cost     - Show token usage and cost\n\
-       /model    - Show or change model\n\
-       /config   - Show settings\n\
-       /resume   - Resume a previous session\n\
-       /exit     - Exit camel"
+      "/help      Show this help\n\
+       /clear     Clear conversation\n\
+       /compact   Summarize old messages\n\
+       /cost      Show token usage and cost\n\
+       /model     Show or change model\n\
+       /config    Show settings\n\
+       /resume    List saved sessions\n\
+       /doctor    Run diagnostics\n\
+       /vim       Toggle vim mode\n\
+       /exit      Exit camel\n\
+       \n\
+       Ctrl-C     Interrupt stream\n\
+       Ctrl-C x2  Exit"
     in
     ShowMessage help_text
 }

@@ -22,7 +22,9 @@ let print_banner ~model ~auto_approve =
   Printf.printf "\n";
   flush stdout
 
-let read_prompt () =
+let read_prompt ~first =
+  if first then
+    Printf.printf "  %s\n\n" (dim "/help for commands");
   Printf.printf "%s " (bold ">");
   flush stdout;
   try
@@ -63,10 +65,12 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   ));
 
   let go = ref true in
+  let first_prompt = ref true in
   while !go do
-    match read_prompt () with
+    match read_prompt ~first:!first_prompt with
     | None -> go := false
     | Some input ->
+      first_prompt := false;
       (match Commands.dispatch input ~messages:!msgs ~cost_tracker:ct with
        | Some Commands.Exit -> go := false
        | Some Commands.ClearMessages ->
