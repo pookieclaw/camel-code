@@ -2,6 +2,8 @@
 
     Replaces input_line with a proper line editor. *)
 
+let dim s = Printf.sprintf "\027[2m%s\027[0m" s
+
 type t = {
   mutable buf : Buffer.t;
   mutable cursor : int;
@@ -132,14 +134,26 @@ let read_line t ~prompt =
 
     | 10 | 13 (* Enter *) ->
       let text = String.trim (Buffer.contents t.buf) in
-      Printf.printf "\n";
-      flush stdout;
-      if String.length text > 0 then begin
-        add_history t text;
-        result := Some text
-      end else
-        result := Some "";
-      done_ := true
+      (* Check for trailing backslash = multi-line continuation *)
+      let raw = Buffer.contents t.buf in
+      if String.length raw > 0 && raw.[String.length raw - 1] = '\\' then begin
+        (* Multi-line: remove backslash, add newline, continue *)
+        Buffer.clear t.buf;
+        Buffer.add_string t.buf (String.sub raw 0 (String.length raw - 1));
+        Buffer.add_char t.buf '\n';
+        t.cursor <- Buffer.length t.buf;
+        Printf.printf "\n%s " (dim "...");
+        flush stdout
+      end else begin
+        Printf.printf "\n";
+        flush stdout;
+        if String.length text > 0 then begin
+          add_history t text;
+          result := Some text
+        end else
+          result := Some "";
+        done_ := true
+      end
 
     | 127 | 8 (* Backspace *) ->
       backspace t;

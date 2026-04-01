@@ -83,6 +83,15 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          msgs := !msgs @ [user_msg];
          msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
          Printf.printf "\n";
+         (* Compact warning — estimate tokens from message count *)
+         let msg_count = List.length !msgs in
+         if msg_count > 40 then
+           Printf.printf "  %s\n" (dim (Printf.sprintf "! %d messages — consider /compact or /clear" msg_count))
+         else if msg_count > 20 then
+           Printf.printf "  %s\n" (dim (Printf.sprintf "%d messages in context" msg_count));
+         (* Footer: model · session · token count *)
+         Printf.printf "  %s\n" (dim (Printf.sprintf "%s · session %s"
+           config.model (String.sub session_id 0 (min 8 (String.length session_id)))));
          thin_line ();
          Printf.printf "\n";
          Session.save ~id:session_id ~model:config.model ~messages:!msgs)

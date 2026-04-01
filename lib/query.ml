@@ -67,8 +67,8 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
   let start_time = Unix.gettimeofday () in
   let error_buf = Buffer.create 256 in
 
-  (* Show spinner *)
-  Printf.printf "\027[33m%s\027[0m" "⠋ ";
+  (* Show thinking indicator *)
+  Printf.printf "\027[2mThinking...\027[0m";
   flush stdout;
 
   (try while true do
