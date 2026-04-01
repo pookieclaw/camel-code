@@ -12,9 +12,9 @@ let thin_line () =
 let print_banner ~model ~auto_approve =
   let mode = if auto_approve then " · auto-approve" else "" in
   Printf.printf "\n";
-  Printf.printf "  %s    %s\n" (yellow "╭───╮") (bold "Camel Code v0.1");
-  Printf.printf "  %s    %s%s\n" (yellow "│🐫 │") (dim model) (dim mode);
-  Printf.printf "  %s    %s\n" (yellow "╰───╯") (dim (Sys.getcwd ()));
+  Printf.printf "  %s  %s\n" (yellow "🐫") (bold "Camel Code v0.1");
+  Printf.printf "      %s%s\n" (dim model) (dim mode);
+  Printf.printf "      %s\n" (dim (Sys.getcwd ()));
   Printf.printf "\n";
   flush stdout
 
