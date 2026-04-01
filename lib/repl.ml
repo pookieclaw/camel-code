@@ -39,6 +39,10 @@ let read_prompt () =
 (** Track Ctrl-C timing for double-tap exit. *)
 let last_interrupt = ref 0.0
 
+let reset_terminal () =
+  (* Restore terminal to sane state on exit *)
+  ignore (Sys.command "stty sane 2>/dev/null")
+
 let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   print_banner ~model:config.model ~auto_approve;
   let ct = Cost_tracker.create ~model:config.model in
@@ -47,15 +51,20 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = ref initial_messages in
 
+  (* Ensure terminal is restored on exit *)
+  at_exit reset_terminal;
+
   (* Ctrl-C handler: abort stream first time, exit on double-tap *)
   Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
     let now = Unix.gettimeofday () in
     Client.abort_stream ();
     if now -. !last_interrupt < 1.0 then begin
+      reset_terminal ();
       Printf.printf "\n\n";
       separator ();
       Printf.printf "%s\n" (dim (Cost_tracker.summary ct));
       Printf.printf "%s\n" (dim "Goodbye! 🐫");
+      flush stdout;
       exit 0
     end else begin
       last_interrupt := now;
@@ -97,10 +106,13 @@ let run_single ~config ~prompt ~auto_approve =
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = [Message.{ role = User; content = [Text prompt] }] in
 
+  at_exit reset_terminal;
   Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
     Client.abort_stream ();
+    reset_terminal ();
     Printf.printf "\n%s\n" (dim "[interrupted]");
     Printf.eprintf "%s\n" (dim (Cost_tracker.summary ct));
+    flush stdout; flush stderr;
     exit 0
   ));
 
