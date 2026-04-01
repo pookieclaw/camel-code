@@ -7,7 +7,7 @@
 (source
  (github liam/camel-code))
 
-(authors "Liam Nguyen")
+(authors "Camel Code Contributors")
 
 (license MIT)
 
