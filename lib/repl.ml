@@ -11,9 +11,10 @@ let separator () =
 
 let print_banner ~model ~auto_approve =
   Printf.printf "\n";
-  Printf.printf "  %s\n" (bold (cyan "╭─────────────────────────────╮"));
-  Printf.printf "  %s\n" (bold (cyan "│     🐫  Camel Code  v0.1   │"));
-  Printf.printf "  %s\n" (bold (cyan "╰─────────────────────────────╯"));
+  let yellow s = Printf.sprintf "\027[33m%s\027[0m" s in
+  Printf.printf "  %s\n" (bold (yellow "╭─────────────────────────────╮"));
+  Printf.printf "  %s\n" (bold (yellow "│     🐫  Camel Code  v0.1   │"));
+  Printf.printf "  %s\n" (bold (yellow "╰─────────────────────────────╯"));
   Printf.printf "\n";
   Printf.printf "  %s %s\n" (dim "model:") (green model);
   Printf.printf "  %s %s\n" (dim "tools:") (green (String.concat ", " (Tool_registry.tool_names ())));
