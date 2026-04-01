@@ -90,4 +90,4 @@ let () =
   | Some prompt ->
     Repl.run_single ~config ~prompt ~auto_approve:args.yes
   | None ->
-    Tui_app.run ~config ~auto_approve:args.yes ~initial_messages ()
+    Repl.run ~config ~auto_approve:args.yes ~initial_messages ()
