@@ -1,79 +1,84 @@
 #!/bin/bash
 # Camel Code — Automated PoC Demo
-# Run this script and screen record your terminal.
-# It simulates a user session with realistic typing delays.
+# Screen record your terminal, then run: bash demo.sh
 
 set -e
 
-DELAY=0.04  # typing speed per character
-PAUSE=1.5   # pause between actions
+DELAY=0.04
+PAUSE=1.5
 
-# Simulate typing with per-character delay
 type_slow() {
-    local text="$1"
-    for (( i=0; i<${#text}; i++ )); do
-        printf '%s' "${text:$i:1}"
+    for (( i=0; i<${#1}; i++ )); do
+        printf '%s' "${1:$i:1}"
         sleep $DELAY
     done
 }
 
-# Type a command, pause, then press enter
 run_cmd() {
-    local cmd="$1"
     sleep "$PAUSE"
-    type_slow "$cmd"
+    type_slow "$1"
     sleep 0.3
     printf '\n'
 }
 
 clear
 
-# ── Scene 1: Show version ──
 echo ""
-echo "  ── Demo: Camel Code ──"
+echo "  ── Camel Code Demo ──"
 echo ""
 sleep 1
+
+# ── 1: Version ──
 type_slow "$ camel --version"
-sleep 0.3
 printf '\n'
 camel --version
 sleep "$PAUSE"
 
-# ── Scene 2: Doctor check ──
+# ── 2: Doctor ──
 echo ""
 type_slow "$ camel doctor"
-sleep 0.3
 printf '\n'
 camel doctor
 sleep 2
 
-# ── Scene 3: Single-shot query ──
+# ── 3: Quick question ──
 echo ""
-type_slow '$ camel -p "What are algebraic data types in OCaml? Explain in 2 sentences."'
-sleep 0.3
+type_slow '$ camel -p "Explain pattern matching in OCaml in one sentence"'
 printf '\n'
-camel -p "What are algebraic data types in OCaml? Explain in 2 sentences."
+camel -p "Explain pattern matching in OCaml in one sentence"
 sleep 2
 
-# ── Scene 4: Tool use — create and read a file ──
+# ── 4: Tool use — write + read (auto-approve) ──
 echo ""
-type_slow '$ camel -p "Create a file /tmp/hello.ml with a simple OCaml hello world program, then read it back" --yes'
-sleep 0.3
+type_slow '$ camel -p "Write a fibonacci function to /tmp/fib.ml then read it back" --yes'
 printf '\n'
-camel -p "Create a file /tmp/hello.ml with a simple OCaml hello world program, then read it back" --yes
+camel -p "Write a fibonacci function to /tmp/fib.ml then read it back" --yes
 sleep 2
 
-# ── Scene 5: Interactive REPL with slash commands ──
+# ── 5: Bash tool with permission prompt (auto-approve) ──
+echo ""
+type_slow '$ camel -p "Run ls -la /tmp/fib.ml to check the file exists" --yes'
+printf '\n'
+camel -p "Run ls -la /tmp/fib.ml to check the file exists" --yes
+sleep 2
+
+# ── 6: Edit tool ──
+echo ""
+type_slow '$ camel -p "Edit /tmp/fib.ml to add a comment at the top saying (* Fibonacci *)" --yes'
+printf '\n'
+camel -p "Edit /tmp/fib.ml to add a comment at the top saying (* Fibonacci *)" --yes
+sleep 2
+
+# ── 7: Interactive REPL ──
 echo ""
 type_slow "$ camel"
-sleep 0.3
 printf '\n'
-# Feed commands to the REPL with timing
 {
-    sleep 3       # let banner render
+    sleep 3
     run_cmd "/help"
-    run_cmd "/stats"
     run_cmd "/diff"
+    run_cmd "/branch"
+    run_cmd "/stats"
     run_cmd "/cost"
     run_cmd "/exit"
 } | camel
