@@ -7,7 +7,6 @@ let yellow s = Printf.sprintf "\027[33m%s\027[0m" s
 let thin_line () =
   Printf.printf "%s\n" (dim "───────────────────────────────────────────")
 
-(** Print a card with left border only (avoids right-border alignment issues). *)
 let git_branch () =
   let ic = Unix.open_process_in "git rev-parse --abbrev-ref HEAD 2>/dev/null" in
   let branch = try Some (String.trim (input_line ic)) with _ -> None in
@@ -20,10 +19,7 @@ let print_banner ~model ~auto_approve =
     | Some b -> Printf.sprintf " · %s" b
     | None -> ""
   in
-  (* Camel pixel sprite using block elements — yellow/amber colored *)
-  (* Sand-colored camel using half-block pixel art *)
-  (* Colors: fg=sand for upper half-block, bg for lower *)
-  let s = "\027[38;2;194;154;88m" in  (* sand foreground *)
+  let s = "\027[38;2;194;154;88m" in
   let r = "\027[0m" in
   Printf.printf "\n";
   Printf.printf "    %s  \xE2\x96\x84\xE2\x96\x84%s          %s\n" s r (bold "Camel Code v0.1");
@@ -31,18 +27,6 @@ let print_banner ~model ~auto_approve =
   Printf.printf "    %s\xE2\x96\x80\xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88\xE2\x96\x80\xE2\x96\x80%s    %s\n" s r (dim (Sys.getcwd ()));
   Printf.printf "\n";
   flush stdout
-
-let read_prompt ~first =
-  if first then
-    Printf.printf "  %s\n\n" (dim "/help for commands");
-  Printf.printf "%s " (bold ">");
-  flush stdout;
-  try
-    let line = input_line stdin in
-    let trimmed = String.trim line in
-    if String.length trimmed = 0 then None
-    else Some trimmed
-  with End_of_file -> None
 
 let reset_terminal () =
   ignore (Sys.command "stty sane 2>/dev/null")
@@ -56,6 +40,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   let tools = Tool_registry.tool_names () in
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = ref initial_messages in
+  let input_state = Input.create () in
 
   at_exit reset_terminal;
 
@@ -74,14 +59,15 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
     end
   ));
 
+  let prompt_str = Printf.sprintf "%s " (bold ">") in
+  Printf.printf "  %s\n\n" (dim "/help for commands · up/down for history · Ctrl-C x2 to exit");
+
   let go = ref true in
-  let first_prompt = ref true in
   while !go do
-    match read_prompt ~first:!first_prompt with
+    match Input.read_line input_state ~prompt:prompt_str with
     | None -> go := false
+    | Some "" -> ()  (* empty input, skip *)
     | Some input ->
-      first_prompt := false;
-      (* Ctrl-L comes through as \012 in cooked mode *)
       let input = if String.length input = 1 && Char.code input.[0] = 12 then "/cls" else input in
       (match Commands.dispatch input ~messages:!msgs ~cost_tracker:ct with
        | Some Commands.Exit -> go := false

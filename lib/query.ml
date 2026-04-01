@@ -160,10 +160,12 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
     Printf.printf "\n%s " (yellow "●");
     flush stdout;
 
+    (* Accumulate full response for markdown rendering *)
+    let response_buf = Buffer.create 1024 in
     let (response, _stop, usage) =
       try
         stream_with_tools ~config ~messages:!msgs ~system_prompt
-          ~on_text:(fun t -> print_string t; flush stdout) ()
+          ~on_text:(fun t -> Buffer.add_string response_buf t; print_string t; flush stdout) ()
       with Failure msg ->
         Printf.printf "\n%s %s\n" (red "Error:") msg;
         flush stdout;
