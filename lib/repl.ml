@@ -2,19 +2,27 @@
 
 let bold s = Printf.sprintf "\027[1m%s\027[0m" s
 let dim s = Printf.sprintf "\027[2m%s\027[0m" s
-let green s = Printf.sprintf "\027[32m%s\027[0m" s
-let blue s = Printf.sprintf "\027[34m%s\027[0m" s
 let yellow s = Printf.sprintf "\027[33m%s\027[0m" s
 
 let thin_line () =
-  Printf.printf "%s\n" (dim "───────────────────────────────────────────────────────────")
+  Printf.printf "%s\n" (dim "───────────────────────────────────────────")
+
+(** Print a card with left border only (avoids right-border alignment issues). *)
+let print_card ~label ~lines =
+  Printf.printf "  %s %s\n" (yellow "|") (bold label);
+  List.iter (fun line ->
+    Printf.printf "  %s %s\n" (yellow "|") line
+  ) lines
 
 let print_banner ~model ~auto_approve =
-  let mode = if auto_approve then " · auto-approve" else "" in
+  let mode_str = if auto_approve then " · auto" else "" in
   Printf.printf "\n";
-  Printf.printf "  %s  %s\n" (yellow "🐫") (bold "Camel Code v0.1");
-  Printf.printf "      %s%s\n" (dim model) (dim mode);
-  Printf.printf "      %s\n" (dim (Sys.getcwd ()));
+  print_card
+    ~label:(bold "Camel Code v0.1")
+    ~lines:[
+      Printf.sprintf "%s%s" (dim model) (dim mode_str);
+      dim (Sys.getcwd ());
+    ];
   Printf.printf "\n";
   flush stdout
 
