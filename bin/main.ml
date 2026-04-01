@@ -17,8 +17,6 @@ let () =
 
   match args.prompt with
   | Some prompt ->
-    (* Single-shot mode *)
-    Repl.run_single ~config ~prompt
+    Repl.run_single ~config ~prompt ~auto_approve:args.yes
   | None ->
-    (* Interactive REPL mode *)
-    Repl.run ~config
+    Repl.run ~config ~auto_approve:args.yes

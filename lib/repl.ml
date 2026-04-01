@@ -1,15 +1,18 @@
-(** Interactive REPL loop. *)
+(** Interactive REPL with tool-use support. *)
 
 let bold s = Printf.sprintf "\027[1m%s\027[0m" s
 let dim s = Printf.sprintf "\027[2m%s\027[0m" s
 let green s = Printf.sprintf "\027[32m%s\027[0m" s
 let blue s = Printf.sprintf "\027[34m%s\027[0m" s
-let yellow s = Printf.sprintf "\027[33m%s\027[0m" s
 
-let print_banner ~model =
+let print_banner ~model ~auto_approve =
   Printf.printf "\n%s\n" (bold "🐫 Camel Code");
   Printf.printf "%s\n" (dim "Two humps, zero runtime.");
   Printf.printf "%s %s\n" (dim "Model:") (green model);
+  Printf.printf "%s %s\n" (dim "Tools:")
+    (green (String.concat ", " (Tool_registry.tool_names ())));
+  if auto_approve then
+    Printf.printf "%s\n" (dim "Auto-approve: ON (--yes)");
   Printf.printf "%s\n\n" (dim "Type your message. Ctrl-D to exit.");
   flush stdout
 
@@ -22,20 +25,8 @@ let read_prompt () =
     else Some (String.trim line)
   with End_of_file -> None
 
-let run_turn ~config ~messages ~cost_tracker =
-  Printf.printf "\n%s " (yellow "camel");
-  flush stdout;
-  let (resp, _stop, usage) =
-    Client.query ~config ~messages
-      ~on_text:(fun t -> print_string t; flush stdout) ()
-  in
-  Printf.printf "\n\n";
-  flush stdout;
-  Cost_tracker.add_turn cost_tracker usage;
-  messages @ [resp]
-
-let run ~(config : Config.t) =
-  print_banner ~model:config.model;
+let run ~(config : Config.t) ~auto_approve =
+  print_banner ~model:config.model ~auto_approve;
   let ct = Cost_tracker.create ~model:config.model in
   let msgs = ref [] in
   Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
@@ -54,17 +45,12 @@ let run ~(config : Config.t) =
     | Some input ->
       let user_msg = Message.{ role = User; content = [Text input] } in
       msgs := !msgs @ [user_msg];
-      msgs := run_turn ~config ~messages:!msgs ~cost_tracker:ct
+      msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ()
   done;
   Printf.printf "\n%s\n%s\n" (dim (Cost_tracker.summary ct)) (dim "Goodbye! 🐫")
 
-let run_single ~config ~prompt =
+let run_single ~config ~prompt ~auto_approve =
   let ct = Cost_tracker.create ~model:config.Config.model in
   let msgs = [Message.{ role = User; content = [Text prompt] }] in
-  let (_resp, _stop, usage) =
-    Client.query ~config ~messages:msgs
-      ~on_text:(fun t -> print_string t; flush stdout) ()
-  in
-  Printf.printf "\n";
-  Cost_tracker.add_turn ct usage;
+  let _final_msgs = Query.run ~config ~messages:msgs ~auto_approve ~cost_tracker:ct () in
   Printf.eprintf "%s\n" (dim (Cost_tracker.summary ct))
