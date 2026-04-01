@@ -157,7 +157,7 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
   let msgs = ref messages in
 
   let rec loop () =
-    Printf.printf "\n%s " (yellow "●");
+    Printf.printf "\n";
     flush stdout;
 
     (* Accumulate full response for markdown rendering *)

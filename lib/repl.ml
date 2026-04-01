@@ -217,8 +217,8 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
     end
   ));
 
-  let prompt_str = Printf.sprintf "%s " (bold ">") in
-  Printf.printf "  %s\n\n" (dim "/help for commands · up/down for history · Ctrl-C x2 to exit");
+  let prompt_str = Printf.sprintf "%s " (bold "\xE2\x9D\xAF") in  (* ❯ *)
+  Printf.printf "\n";
 
   let go = ref true in
   while !go do
@@ -230,26 +230,36 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
       (match Commands.dispatch input ~messages:!msgs ~cost_tracker:ct with
        | Some Commands.Exit -> go := false
        | Some Commands.ClearMessages ->
-         msgs := []; Printf.printf "%s\n" (dim "[cleared]"); flush stdout
+         msgs := [];
+         Printf.printf "  \xE2\x94\x94 %s\n" (dim "Cleared");  (* └ *)
+         flush stdout
        | Some (Commands.ShowMessage s) ->
-         Printf.printf "%s\n" (dim s); flush stdout
+         Printf.printf "  \xE2\x94\x94 %s\n" (dim s);
+         flush stdout
        | Some (Commands.SwitchModel _m) ->
-         Printf.printf "%s\n" (dim "Model switching not yet supported"); flush stdout
+         Printf.printf "  \xE2\x94\x94 %s\n" (dim "Model switching not yet supported");
+         flush stdout
        | Some Commands.Continue -> ()
        | None ->
          let user_msg = Message.{ role = User; content = [Text input] } in
          msgs := !msgs @ [user_msg];
          msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
          Printf.printf "\n";
-         let msg_count = List.length !msgs in
-         if msg_count > 40 then
-           Printf.printf "  %s\n" (dim (Printf.sprintf "! %d messages — consider /compact or /clear" msg_count))
-         else if msg_count > 20 then
-           Printf.printf "  %s\n" (dim (Printf.sprintf "%d messages in context" msg_count));
-         Printf.printf "  %s\n" (dim (Printf.sprintf "%s · session %s"
-           config.model (String.sub session_id 0 (min 8 (String.length session_id)))));
+         (* Separator *)
          thin_line ();
          Printf.printf "\n";
+         (* Footer: mode + hints *)
+         let mode_label = if auto_approve then "auto-approve on" else "ask mode" in
+         let msg_count = List.length !msgs in
+         let context_warn = if msg_count > 40 then
+           Printf.sprintf "  %s" (yellow (Printf.sprintf "! %d messages" msg_count))
+         else "" in
+         Printf.printf "  %s %s  %s  %s%s\n\n"
+           (dim "\xE2\x97\x8F")  (* ● *)
+           (dim mode_label)
+           (dim "/help for shortcuts")
+           (dim (Printf.sprintf "%s" config.model))
+           context_warn;
          Session.save ~id:session_id ~model:config.model ~messages:!msgs)
   done;
 
