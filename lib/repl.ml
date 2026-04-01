@@ -72,21 +72,23 @@ let print_banner ~model ~auto_approve =
   let y s = Printf.sprintf "\027[33m%s\027[0m" s in  (* yellow *)
   let sand s = Printf.sprintf "\027[38;2;194;154;88m%s\027[0m" s in
 
-  (* Content lines with their visible display widths *)
+  (* Get terminal width *)
+  let term_w =
+    let ic = Unix.open_process_in "tput cols 2>/dev/null" in
+    let w = try int_of_string (String.trim (input_line ic)) with _ -> 80 in
+    ignore (Unix.close_process_in ic);
+    w
+  in
+
   let welcome = Printf.sprintf "Welcome back %s!" user in
   let info_line = Printf.sprintf "%s \xC2\xB7 %s%s" mode_str model branch_str in
   let sprite = [| "  \xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88" |] in
 
-  (* Compute widest visible content *)
-  let widths = [
-    String.length welcome;
-    String.length info_line;
-    String.length short_cwd;
-    8;  (* sprite is ~8 display cols *)
-  ] in
-  let max_w = List.fold_left max 20 widths in
-  let card_w = max_w + 4 in  (* 2 padding each side *)
-  let col_right = card_w + 1 in
+  (* Use full terminal width for the card *)
+  let card_w = term_w - 2 in  (* 1 col margin each side *)
+  let col_right = term_w - 1 in
+  let left_w = card_w * 2 / 3 in  (* left panel = 2/3 *)
+  let _right_start = left_w + 2 in  (* right panel starts here *)
 
   let card_line content =
     Printf.printf "%s %s\027[%dG%s\n"
@@ -97,38 +99,55 @@ let print_banner ~model ~auto_approve =
   let label = "Camel Code v0.1" in
   let label_dashes = card_w - String.length label - 4 in
 
+  (* Right panel content *)
+  let tip_header = "Tips" in
+  let tip_text = "/help for commands" in
+  let activity_header = "Recent activity" in
+  let sessions = Session.list_sessions () in
+  let activity_text = match sessions with
+    | s :: _ -> Printf.sprintf "%d messages · %s" s.message_count (String.sub s.id 0 (min 8 (String.length s.id)))
+    | [] -> "No recent sessions"
+  in
+
   Printf.printf "\n";
 
   (* Top: ╭─ label ───╮ *)
   Printf.printf "%s %s %s%s\n"
-    (y (Printf.sprintf "\xE2\x94\x8C\xE2\x94\x80"))
+    (y "\xE2\x94\x8C\xE2\x94\x80")
     (bold label)
     (y (repeat_char "\xE2\x94\x80" (max 1 label_dashes)))
     (y "\xE2\x94\x90");
 
-  blank ();
+  (* Row 1: blank | tip header *)
+  let r1_right = Printf.sprintf "%s" (bold (yellow tip_header)) in
+  Printf.printf "%s %*s%s\027[%dG%s\n"
+    (y "\xE2\x94\x82") left_w "" r1_right col_right (y "\xE2\x94\x82");
 
-  (* Welcome centered *)
-  let wpad = (max_w - String.length welcome) / 2 + 1 in
-  card_line (Printf.sprintf "%s%s" (String.make wpad ' ') (bold welcome));
-
-  blank ();
-
-  (* Camel sprite centered *)
-  Array.iter (fun s ->
-    let spad = (max_w - 8) / 2 + 1 in  (* sprite ~8 display cols *)
-    card_line (Printf.sprintf "%s%s" (String.make spad ' ') (sand s))
-  ) sprite;
+  (* Row 2: welcome | tip text *)
+  let wpad = (left_w - String.length welcome) / 2 in
+  Printf.printf "%s %*s%s\027[%dG%s\027[%dG%s\n"
+    (y "\xE2\x94\x82") wpad "" (bold welcome) (left_w + 1) (dim tip_text) col_right (y "\xE2\x94\x82");
 
   blank ();
 
-  (* Model info centered *)
-  let ipad = (max_w - String.length info_line) / 2 + 1 in
-  card_line (Printf.sprintf "%s%s" (String.make ipad ' ') (yellow info_line));
+  (* Row 4-6: sprite | activity header + text *)
+  let spad = (left_w - 8) / 2 in
+  Printf.printf "%s %*s%s\027[%dG%s\027[%dG%s\n"
+    (y "\xE2\x94\x82") spad "" (sand sprite.(0)) (left_w + 1) (bold (yellow activity_header)) col_right (y "\xE2\x94\x82");
+  Printf.printf "%s %*s%s\027[%dG%s\027[%dG%s\n"
+    (y "\xE2\x94\x82") spad "" (sand sprite.(1)) (left_w + 1) (dim activity_text) col_right (y "\xE2\x94\x82");
+  Printf.printf "%s %*s%s\027[%dG%s\n"
+    (y "\xE2\x94\x82") spad "" (sand sprite.(2)) col_right (y "\xE2\x94\x82");
 
-  (* Cwd centered *)
-  let cpad = (max_w - String.length short_cwd) / 2 + 1 in
-  card_line (Printf.sprintf "%s%s" (String.make cpad ' ') (dim short_cwd));
+  blank ();
+
+  (* Model info *)
+  let ipad = (left_w - String.length info_line) / 2 in
+  card_line (Printf.sprintf "%*s%s" ipad "" (yellow info_line));
+
+  (* Cwd *)
+  let cpad = (left_w - String.length short_cwd) / 2 in
+  card_line (Printf.sprintf "%*s%s" cpad "" (dim short_cwd));
 
   (* Bottom: ╰───╯ *)
   Printf.printf "%s%s\n"
