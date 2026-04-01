@@ -10,10 +10,22 @@ let thin_line () =
 (** Print a card with left border only (avoids right-border alignment issues). *)
 let print_banner ~model ~auto_approve =
   let mode_str = if auto_approve then " · auto" else "" in
+  (* Camel pixel sprite using block elements — yellow/amber colored *)
+  let b s = Printf.sprintf "\027[38;2;210;160;60m%s\027[0m" s in
   Printf.printf "\n";
-  Printf.printf "    \027[33m\027[1m🐫 Camel Code\027[0m v0.1\n";
-  Printf.printf "    %s%s\n" (dim model) (dim mode_str);
-  Printf.printf "    %s\n" (dim (Sys.getcwd ()));
+  Printf.printf "    %s    %s\n"
+    (b "    ##")
+    (bold "Camel Code v0.1");
+  Printf.printf "    %s    %s%s\n"
+    (b "  ######")
+    (dim model) (dim mode_str);
+  Printf.printf "    %s    %s\n"
+    (b "  # ## #")
+    (dim (Sys.getcwd ()));
+  Printf.printf "    %s\n"
+    (b "  #  # #");
+  Printf.printf "    %s\n"
+    (b "  |  | |");
   Printf.printf "\n";
   flush stdout
 
