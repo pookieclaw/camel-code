@@ -151,8 +151,7 @@ let render_screen t ~messages ~model ~cost_summary ~is_streaming =
   (* Status line *)
   Printf.printf "%s\n" (render_status ~model ~cost_summary ~cols);
 
-  (* Input area *)
-  Printf.printf "\027[K %s %s\n" (fg_blue "❯") t.input_text;
-  Printf.printf "\027[K";
+  (* Input area — cursor stays on same line as input *)
+  Printf.printf "\027[K %s %s" (fg_blue "❯") t.input_text;
 
   flush stdout
