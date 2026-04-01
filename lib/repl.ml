@@ -7,17 +7,16 @@ let blue s = Printf.sprintf "\027[34m%s\027[0m" s
 let cyan s = Printf.sprintf "\027[36m%s\027[0m" s
 
 let separator () =
-  Printf.printf "%s\n" (dim (String.make 50 '-'))
+  Printf.printf "  %s\n" (dim "────────────────────────────────")
 
 let print_banner ~model ~auto_approve =
   Printf.printf "\n";
   let yellow s = Printf.sprintf "\027[33m%s\027[0m" s in
-  Printf.printf "  %s\n" (bold (yellow "╭─────────────────────────────╮"));
-  Printf.printf "  %s\n" (bold (yellow "│     🐫  Camel Code  v0.1   │"));
-  Printf.printf "  %s\n" (bold (yellow "╰─────────────────────────────╯"));
+  Printf.printf "\n  %s  %s\n" (yellow "🐫") (bold (yellow "Camel Code v0.1"));
   Printf.printf "\n";
   Printf.printf "  %s %s\n" (dim "model:") (green model);
-  Printf.printf "  %s %s\n" (dim "tools:") (green (String.concat ", " (Tool_registry.tool_names ())));
+  let tool_count = List.length (Tool_registry.tool_names ()) in
+  Printf.printf "  %s %s\n" (dim "tools:") (green (Printf.sprintf "%d tools available" tool_count));
   if auto_approve then
     Printf.printf "  %s %s\n" (dim "mode:") (green "auto-approve");
   Printf.printf "  %s %s\n" (dim "cwd:") (dim (Sys.getcwd ()));
