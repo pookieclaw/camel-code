@@ -4,20 +4,29 @@ let bold s = Printf.sprintf "\027[1m%s\027[0m" s
 let dim s = Printf.sprintf "\027[2m%s\027[0m" s
 let green s = Printf.sprintf "\027[32m%s\027[0m" s
 let blue s = Printf.sprintf "\027[34m%s\027[0m" s
+let cyan s = Printf.sprintf "\027[36m%s\027[0m" s
+
+let separator () =
+  Printf.printf "%s\n" (dim (String.make 50 '-'))
 
 let print_banner ~model ~auto_approve =
-  Printf.printf "\n%s\n" (bold "🐫 Camel Code");
-  Printf.printf "%s\n" (dim "Two humps, zero runtime.");
-  Printf.printf "%s %s\n" (dim "Model:") (green model);
-  Printf.printf "%s %s\n" (dim "Tools:")
-    (green (String.concat ", " (Tool_registry.tool_names ())));
+  Printf.printf "\n";
+  Printf.printf "  %s\n" (bold (cyan "╭─────────────────────────────╮"));
+  Printf.printf "  %s\n" (bold (cyan "│     🐫  Camel Code  v0.1   │"));
+  Printf.printf "  %s\n" (bold (cyan "╰─────────────────────────────╯"));
+  Printf.printf "\n";
+  Printf.printf "  %s %s\n" (dim "model:") (green model);
+  Printf.printf "  %s %s\n" (dim "tools:") (green (String.concat ", " (Tool_registry.tool_names ())));
   if auto_approve then
-    Printf.printf "%s\n" (dim "Auto-approve: ON (--yes)");
-  Printf.printf "%s\n\n" (dim "Type your message. Ctrl-C to interrupt, Ctrl-C twice to exit.");
+    Printf.printf "  %s %s\n" (dim "mode:") (green "auto-approve");
+  Printf.printf "  %s %s\n" (dim "cwd:") (dim (Sys.getcwd ()));
+  Printf.printf "\n";
+  separator ();
+  Printf.printf "\n";
   flush stdout
 
 let read_prompt () =
-  Printf.printf "%s " (blue ">");
+  Printf.printf "%s " (bold (blue ">"));
   flush stdout;
   try
     let line = input_line stdin in
@@ -40,13 +49,12 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   (* Ctrl-C handler: abort stream first time, exit on double-tap *)
   Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
     let now = Unix.gettimeofday () in
-    (* Kill any running curl *)
     Client.abort_stream ();
     if now -. !last_interrupt < 1.0 then begin
-      (* Double Ctrl-C within 1 second — exit *)
-      Printf.printf "\n\n%s\n%s\n"
-        (dim (Cost_tracker.summary ct))
-        (dim "Goodbye! 🐫");
+      Printf.printf "\n\n";
+      separator ();
+      Printf.printf "%s\n" (dim (Cost_tracker.summary ct));
+      Printf.printf "%s\n" (dim "Goodbye! 🐫");
       exit 0
     end else begin
       last_interrupt := now;
@@ -73,10 +81,14 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          let user_msg = Message.{ role = User; content = [Text input] } in
          msgs := !msgs @ [user_msg];
          msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
+         separator ();
          Session.save ~id:session_id ~model:config.model ~messages:!msgs)
   done;
 
-  Printf.printf "\n%s\n%s\n" (dim (Cost_tracker.summary ct)) (dim "Goodbye! 🐫")
+  Printf.printf "\n";
+  separator ();
+  Printf.printf "%s\n" (dim (Cost_tracker.summary ct));
+  Printf.printf "%s\n" (dim "Goodbye! 🐫")
 
 let run_single ~config ~prompt ~auto_approve =
   let ct = Cost_tracker.create ~model:config.Config.model in
@@ -84,7 +96,6 @@ let run_single ~config ~prompt ~auto_approve =
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = [Message.{ role = User; content = [Text prompt] }] in
 
-  (* Ctrl-C aborts the stream *)
   Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
     Client.abort_stream ();
     Printf.printf "\n%s\n" (dim "[interrupted]");

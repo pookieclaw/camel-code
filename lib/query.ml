@@ -157,7 +157,7 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
   let msgs = ref messages in
 
   let rec loop () =
-    Printf.printf "\n%s " (yellow "camel");
+    Printf.printf "\n  %s " (yellow (Printf.sprintf "\027[1m🐫 camel\027[0m"));
     flush stdout;
 
     let (response, _stop, usage) =

@@ -47,7 +47,7 @@ let enable_raw_mode () =
   let raw = { termios with
     c_icanon = false;
     c_echo = false;
-    c_isig = false;
+    c_isig = true;  (* Keep signal handling so Ctrl-C works *)
     c_vmin = 1;
     c_vtime = 0;
   } in
