@@ -234,7 +234,15 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          Printf.printf "  \xE2\x94\x94 %s\n" (dim "Cleared");  (* └ *)
          flush stdout
        | Some (Commands.ShowMessage s) ->
-         Printf.printf "  \xE2\x94\x94 %s\n" (dim s);
+         (* Indent all lines under the └ connector *)
+         let lines = String.split_on_char '\n' s in
+         (match lines with
+          | [] -> ()
+          | first :: rest ->
+            Printf.printf "  \xE2\x94\x94 %s\n" (dim first);
+            List.iter (fun l ->
+              Printf.printf "    %s\n" (dim l)
+            ) rest);
          flush stdout
        | Some (Commands.SwitchModel _m) ->
          Printf.printf "  \xE2\x94\x94 %s\n" (dim "Model switching not yet supported");

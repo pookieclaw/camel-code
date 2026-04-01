@@ -53,13 +53,16 @@ let read_byte () =
 
 (** Clear hint lines below the input. *)
 let clear_hints t =
-  for _ = 1 to t.hint_lines do
-    Printf.printf "\n\027[K"  (* move down + clear *)
-  done;
-  (* Move back up *)
-  if t.hint_lines > 0 then
-    Printf.printf "\027[%dA" t.hint_lines;
-  t.hint_lines <- 0
+  if t.hint_lines > 0 then begin
+    (* Save cursor, move down and clear each hint line, restore *)
+    Printf.printf "\027[s";
+    for _ = 1 to t.hint_lines do
+      Printf.printf "\n\027[2K"
+    done;
+    Printf.printf "\027[u";
+    t.hint_lines <- 0;
+    flush stdout
+  end
 
 (** Show matching slash command hints below the input line. *)
 let show_hints t =

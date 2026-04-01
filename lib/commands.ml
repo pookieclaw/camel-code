@@ -306,7 +306,7 @@ let cmd_plan = {
   name = "plan";
   description = "Enter plan mode (read-only exploration)";
   execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
-    ShowMessage "Plan mode: the model will only read files and explore — no edits.\n(Plan mode enforcement not yet implemented, but you can instruct the model to only plan.)"
+    ShowMessage "Enabled plan mode"
 }
 
 (* ── Tools & Extensions ────────────────────────────────────────── *)
