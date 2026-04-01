@@ -10,7 +10,18 @@ let all_tools : packed list = [
   (module Tool_edit : S);
   (module Tool_glob : S);
   (module Tool_grep : S);
+  (module Tool_agent : S);
+  (module Tool_web_fetch : S);
 ]
+
+(** Append dynamically discovered tools (e.g., MCP). *)
+let mcp_tools = ref []
+
+let register_mcp_tools tools =
+  mcp_tools := tools
+
+let all_tools_with_mcp () =
+  all_tools @ !mcp_tools
 
 (** Find a tool by name. *)
 let find_tool name =
