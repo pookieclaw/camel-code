@@ -1,9 +1,24 @@
+open Camel_lib
+
 let () =
-  let version = "0.1.0" in
-  Printf.printf "🐫 Camel Code v%s\n" version;
-  Printf.printf "Two humps, zero runtime.\n";
-  Printf.printf "\nUsage: camel [options]\n";
-  Printf.printf "  -p <prompt>    Send a single prompt\n";
-  Printf.printf "  --model <m>    Select model (default: claude-sonnet-4-20250514)\n";
-  Printf.printf "  --version      Show version\n";
-  Printf.printf "\nRun 'camel' with no args to enter interactive REPL.\n"
+  let args = Args.parse Sys.argv in
+
+  if args.version then begin
+    Printf.printf "camel %s\n" Camel.version;
+    exit 0
+  end;
+
+  let config = Config.create
+    ?api_key:args.api_key
+    ?model:args.model
+    ?max_tokens:args.max_tokens
+    ()
+  in
+
+  match args.prompt with
+  | Some prompt ->
+    (* Single-shot mode *)
+    Repl.run_single ~config ~prompt
+  | None ->
+    (* Interactive REPL mode *)
+    Repl.run ~config
