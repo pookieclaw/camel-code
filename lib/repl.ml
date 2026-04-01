@@ -8,21 +8,12 @@ let thin_line () =
   Printf.printf "%s\n" (dim "───────────────────────────────────────────")
 
 (** Print a card with left border only (avoids right-border alignment issues). *)
-let print_card ~label ~lines =
-  Printf.printf "  %s %s\n" (yellow "|") (bold label);
-  List.iter (fun line ->
-    Printf.printf "  %s %s\n" (yellow "|") line
-  ) lines
-
 let print_banner ~model ~auto_approve =
   let mode_str = if auto_approve then " · auto" else "" in
   Printf.printf "\n";
-  print_card
-    ~label:(bold "Camel Code v0.1")
-    ~lines:[
-      Printf.sprintf "%s%s" (dim model) (dim mode_str);
-      dim (Sys.getcwd ());
-    ];
+  Printf.printf "    \027[33m\027[1m🐫 Camel Code\027[0m v0.1\n";
+  Printf.printf "    %s%s\n" (dim model) (dim mode_str);
+  Printf.printf "    %s\n" (dim (Sys.getcwd ()));
   Printf.printf "\n";
   flush stdout
 
