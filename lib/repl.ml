@@ -196,6 +196,9 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = ref initial_messages in
   let input_state = Input.create () in
+  (* Register slash commands for autocomplete *)
+  let cmd_names = List.map (fun (c : Commands.command) -> c.name) Commands.all_commands in
+  Input.set_completions input_state cmd_names;
 
   at_exit reset_terminal;
 
