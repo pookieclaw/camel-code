@@ -22,7 +22,7 @@ let whoami () =
 let print_banner ~model ~auto_approve =
   let mode_str = if auto_approve then "auto" else "ask" in
   let branch_str = match git_branch () with
-    | Some b -> Printf.sprintf " \xC2\xB7 %s" b
+    | Some b -> " / " ^ b
     | None -> ""
   in
   let user = whoami () in
@@ -35,69 +35,12 @@ let print_banner ~model ~auto_approve =
     else cwd
   in
 
-  (* Use absolute cursor positioning for right border — immune to ANSI width issues *)
-  let w = 52 in  (* box inner width *)
-  let col_r = w + 4 in  (* right border column *)
-
-  let border s = Printf.sprintf "\027[33m%s\027[0m" s in
-  let sand s = Printf.sprintf "\027[38;2;194;154;88m%s\027[0m" s in
-
-  (* Helper: print bordered row with content, right border at fixed column *)
-  let row content =
-    Printf.printf "  %s %s\027[%dG%s\n" (border "\xE2\x94\x82") content col_r (border "\xE2\x94\x82")
-  in
-  let empty_row () = row "" in
-
   Printf.printf "\n";
-
-  (* Top border with title *)
-  let title = "Camel Code v0.1" in
-  let title_len = String.length title in
-  let fill = w - title_len - 2 in
-  Printf.printf "  %s %s %s%s\n"
-    (border "\xE2\x94\x8C\xE2\x94\x80")
-    (bold title)
-    (border (String.init fill (fun _ -> '\xE2') |> fun _ ->
-      let buf = Buffer.create (fill * 3) in
-      for _ = 1 to fill do Buffer.add_string buf "\xE2\x94\x80" done;
-      Buffer.contents buf))
-    (border "\xE2\x94\x90");
-
-  empty_row ();
-
-  (* Welcome *)
-  let welcome = Printf.sprintf "%s" (bold (Printf.sprintf "Welcome back %s!" user)) in
-  row (Printf.sprintf "%*s%s" ((w - String.length (Printf.sprintf "Welcome back %s!" user)) / 2) "" welcome);
-
-  empty_row ();
-
-  (* Camel sprite — block characters *)
-  let sprite_lines = [
-    "   \xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88";
-    "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88";
-    "  \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88";
-  ] in
-  List.iter (fun s ->
-    row (Printf.sprintf "%*s%s" 20 "" (sand s))
-  ) sprite_lines;
-
-  empty_row ();
-
-  (* Model info *)
-  let info = Printf.sprintf "%s \xC2\xB7 %s%s" mode_str model branch_str in
-  row (Printf.sprintf "%*s%s" (max 1 ((w - String.length info) / 2)) "" (yellow info));
-
-  (* Cwd *)
-  row (Printf.sprintf "%*s%s" (max 1 ((w - String.length short_cwd) / 2)) "" (dim short_cwd));
-
-  (* Bottom border *)
-  let bot = Buffer.create (w * 3) in
-  for _ = 1 to w + 1 do Buffer.add_string bot "\xE2\x94\x80" done;
-  Printf.printf "  %s%s%s\n"
-    (border "\xE2\x94\x94")
-    (border (Buffer.contents bot))
-    (border "\xE2\x94\x98");
-
+  Printf.printf "    %s  %s\n" (bold "Camel Code") (dim "v0.1");
+  Printf.printf "    %s %s%s\n" (yellow model) (yellow mode_str) (yellow branch_str);
+  Printf.printf "    %s\n" (dim short_cwd);
+  Printf.printf "\n";
+  Printf.printf "    %s\n" (bold (Printf.sprintf "Welcome back %s!" user));
   Printf.printf "\n";
   flush stdout
 
