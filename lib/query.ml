@@ -176,6 +176,18 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
     flush stdout;
     Cost_tracker.add_turn cost_tracker usage;
 
+    (* Per-turn cost *)
+    let turn_cost =
+      let info = Cost_tracker.get_cost_info config.model in
+      let ic = Float.of_int usage.input_tokens *. info.input_cost_per_mtok /. 1_000_000.0 in
+      let oc = Float.of_int usage.output_tokens *. info.output_cost_per_mtok /. 1_000_000.0 in
+      ic +. oc
+    in
+    if turn_cost > 0.0 then
+      Printf.printf "%s\n" (dim (Printf.sprintf "  %d in / %d out · $%.4f"
+        usage.input_tokens usage.output_tokens turn_cost));
+    flush stdout;
+
     msgs := !msgs @ [response];
 
     if has_tool_use response then begin

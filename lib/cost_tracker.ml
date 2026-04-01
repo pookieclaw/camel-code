@@ -13,6 +13,11 @@ let model_costs = [
 
 let default_cost = { input_cost_per_mtok = 3.0; output_cost_per_mtok = 15.0 }
 
+let get_cost_info model =
+  match List.assoc_opt model model_costs with
+  | Some i -> i
+  | None -> default_cost
+
 type t = {
   mutable total_usage : Message.usage;
   mutable turn_count : int;

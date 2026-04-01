@@ -8,8 +8,18 @@ let thin_line () =
   Printf.printf "%s\n" (dim "───────────────────────────────────────────")
 
 (** Print a card with left border only (avoids right-border alignment issues). *)
+let git_branch () =
+  let ic = Unix.open_process_in "git rev-parse --abbrev-ref HEAD 2>/dev/null" in
+  let branch = try Some (String.trim (input_line ic)) with _ -> None in
+  ignore (Unix.close_process_in ic);
+  branch
+
 let print_banner ~model ~auto_approve =
   let mode_str = if auto_approve then " · auto" else "" in
+  let branch_str = match git_branch () with
+    | Some b -> Printf.sprintf " · %s" b
+    | None -> ""
+  in
   (* Camel pixel sprite using block elements — yellow/amber colored *)
   (* Sand-colored camel using half-block pixel art *)
   (* Colors: fg=sand for upper half-block, bg for lower *)
@@ -17,7 +27,7 @@ let print_banner ~model ~auto_approve =
   let r = "\027[0m" in
   Printf.printf "\n";
   Printf.printf "    %s  \xE2\x96\x84\xE2\x96\x84%s          %s\n" s r (bold "Camel Code v0.1");
-  Printf.printf "    %s \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x84\xE2\x96\x84%s    %s%s\n" s r (dim model) (dim mode_str);
+  Printf.printf "    %s \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x84\xE2\x96\x84%s    %s%s\n" s r (dim model) (dim (mode_str ^ branch_str));
   Printf.printf "    %s\xE2\x96\x80\xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88\xE2\x96\x80\xE2\x96\x80%s    %s\n" s r (dim (Sys.getcwd ()));
   Printf.printf "\n";
   flush stdout
