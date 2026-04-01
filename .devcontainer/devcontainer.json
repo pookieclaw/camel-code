@@ -20,7 +20,9 @@
       }
     }
   },
-  "postCreateCommand": "eval $(opam env) && opam install . --deps-only -y && dune build",
+  "postCreateCommand": "eval $(opam env) && opam install . --deps-only -y && dune build && dune install",
   "forwardPorts": [],
-  "mounts": []
+  "mounts": [
+    "source=${localWorkspaceFolder}/.camel-home,target=/home/opam/.camel,type=bind"
+  ]
 }
