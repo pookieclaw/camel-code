@@ -12,6 +12,11 @@ let all_tools : packed list = [
   (module Tool_grep : S);
   (module Tool_agent : S);
   (module Tool_web_fetch : S);
+  (module Tool_ask_user : S);
+  (module Tool_sleep : S);
+  (module Tool_task.Create : S);
+  (module Tool_task.List_ : S);
+  (module Tool_task.Update : S);
 ]
 
 (** Append dynamically discovered tools (e.g., MCP). *)

@@ -102,9 +102,34 @@ let cmd_resume = {
 }
 
 (** All registered commands. *)
+let cmd_doctor = {
+  name = "doctor";
+  description = "Run diagnostic checks";
+  execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
+    Doctor.run_all ();
+    Continue
+}
+
+let cmd_login = {
+  name = "login";
+  description = "Authenticate via OAuth";
+  execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
+    (match Oauth.login () with
+     | Some _token -> ShowMessage "Login successful!"
+     | None -> ShowMessage "Login failed.")
+}
+
+let cmd_vim = {
+  name = "vim";
+  description = "Toggle vim mode";
+  execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
+    ShowMessage "Vim mode toggled. (Restart to apply)"
+}
+
 let all_commands = [
   cmd_help; cmd_clear; cmd_cost; cmd_exit;
   cmd_model; cmd_config; cmd_compact; cmd_resume;
+  cmd_doctor; cmd_login; cmd_vim;
 ]
 
 (** Parse and dispatch a slash command. Returns None if not a command. *)

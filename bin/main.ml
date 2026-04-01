@@ -46,7 +46,16 @@ let () =
       end else []
   in
 
+  (* Initialize feature flags *)
+  Feature_flags.init ();
+
   match args.prompt with
+  | Some "__doctor__" ->
+    Doctor.run_all ()
+  | Some "__login__" ->
+    (match Oauth.login () with
+     | Some _ -> Printf.printf "Login successful!\n"
+     | None -> Printf.printf "Login failed.\n"; exit 1)
   | Some prompt ->
     Repl.run_single ~config ~prompt ~auto_approve:args.yes
   | None ->

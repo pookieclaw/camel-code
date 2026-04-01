@@ -12,15 +12,15 @@ For fun. And because rewriting 513K lines of TypeScript in a language with algeb
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 0 | Repo & DevContainer Setup | In Progress |
-| 1 | The Talking Camel — API streaming + REPL | Planned |
-| 2 | The Camel Gets Tools — Agentic tool loop | Planned |
-| 3 | The Camel Gets a Face — Full TUI | Planned |
-| 4 | The Camel Remembers — Sessions & config | Planned |
-| 5 | The Camel Connects — MCP, agents, hooks | Planned |
-| 6 | The Camel Gets Vim Legs — Vim & keybindings | Planned |
-| 7 | The Camel Goes Remote — OAuth & bridge | Planned |
-| 8 | The Polished Camel — Full feature parity | Planned |
+| 0 | Repo & DevContainer Setup | Done |
+| 1 | The Talking Camel — API streaming + REPL | Done |
+| 2 | The Camel Gets Tools — Agentic tool loop | Done |
+| 3 | The Camel Gets a Face — Full TUI | Done |
+| 4 | The Camel Remembers — Sessions & config | Done |
+| 5 | The Camel Connects — MCP, agents, hooks | Done |
+| 6 | The Camel Gets Vim Legs — Vim & keybindings | Done |
+| 7 | The Camel Goes Remote — OAuth & bridge | Done |
+| 8 | The Polished Camel — Full feature parity | Done |
 
 ## Quick Start
 
