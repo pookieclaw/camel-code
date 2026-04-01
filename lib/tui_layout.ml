@@ -15,7 +15,7 @@ open Tui_ansi
 
 (** Render a horizontal separator line. *)
 let render_separator ~cols =
-  Printf.printf "\027[2m%s\027[0m\n" (String.make cols '─')
+  Printf.printf "\027[2m%s\027[0m\n" (String.make cols '-')
 
 (** Wrap text to fit within a given width. *)
 let word_wrap text width =

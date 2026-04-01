@@ -1,4 +1,7 @@
-(** Agent tool — spawn subagents with nested query loops. *)
+(** Agent tool — spawn subagents with nested query loops.
+
+    Note: Uses Client.query directly instead of Query.run to avoid
+    the Tool_registry dependency cycle. Agents run without tools. *)
 
 open Tool_intf
 
@@ -22,24 +25,16 @@ let execute ~input ~cwd:_ =
   Printf.printf "\027[2m[Spawning agent: %s]\027[0m\n" desc;
   flush stdout;
 
-  (* Create a nested query with the agent prompt *)
+  (* Simple non-tool query to avoid dependency cycle *)
   let config = Config.create () in
-  let tools = Tool_registry.tool_names () in
-  let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = [Message.{ role = User; content = [Text prompt] }] in
-  let ct = Cost_tracker.create ~model:config.model in
-
-  let final_msgs = Query.run ~config ~messages:msgs ~auto_approve:true
-    ~cost_tracker:ct ?system_prompt () in
-
-  (* Extract the last assistant response *)
-  let response = List.fold_left (fun acc m ->
-    match m.Message.role with
-    | Message.Assistant -> Message.message_text m
-    | _ -> acc
-  ) "(no response)" final_msgs in
-
-  Printf.printf "\027[2m[Agent complete: %s]\027[0m\n" (Cost_tracker.summary ct);
+  let (resp, _stop, usage) =
+    Client.query ~config ~messages:msgs
+      ~on_text:(fun t -> print_string t; flush stdout) ()
+  in
+  let response = Message.message_text resp in
+  Printf.printf "\n\027[2m[Agent done | %d in / %d out tokens]\027[0m\n"
+    usage.input_tokens usage.output_tokens;
   flush stdout;
   { output = response; is_error = false }
 

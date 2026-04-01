@@ -31,7 +31,7 @@ let delete_range t start_pos end_pos =
   t.cursor <- min s (max 0 (String.length t.text - 1))
 
 (** Execute an action on the editor state. *)
-let execute_action t action =
+let rec execute_action t action =
   match action with
   | Move motion ->
     t.cursor <- Vim_motions.execute_motion motion t.text t.cursor

@@ -87,7 +87,6 @@ let poll_messages t =
     ignore (Unix.close_process_in ic);
     (try
       let json = Yojson.Safe.from_string (Buffer.contents buf) in
-      let open Yojson.Safe.Util in
       match json with
       | `List msgs -> List.length msgs
       | _ -> 0
