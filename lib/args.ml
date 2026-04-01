@@ -10,13 +10,14 @@ type t = {
   version : bool;
   resume : string option;
   continue_last : bool;
+  help : bool;
 }
 
 let parse argv =
   let r = ref {
     prompt = None; model = None; api_key = None;
     max_tokens = None; yes = false; verbose = false; version = false;
-    resume = None; continue_last = false;
+    resume = None; continue_last = false; help = false;
   } in
   let i = ref 1 in
   let len = Array.length argv in
@@ -31,6 +32,7 @@ let parse argv =
      | "-y" | "--yes" -> r := { !r with yes = true }
      | "-v" | "--verbose" -> r := { !r with verbose = true }
      | "--version" -> r := { !r with version = true }
+     | "-h" | "--help" -> r := { !r with help = true }
      | "--resume" -> r := { !r with resume = Some (next ()) }
      | "--continue" | "-c" -> r := { !r with continue_last = true }
      | "login" when !r.prompt = None -> r := { !r with prompt = Some "__login__" }

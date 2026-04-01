@@ -51,8 +51,8 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
     else begin
       let result = T.execute ~input ~cwd in
       (* Print a truncated preview of the output *)
-      let preview = if String.length result.output > 200 then
-        String.sub result.output 0 200 ^ "..."
+      let preview = if String.length result.output > 1000 then
+        String.sub result.output 0 1000 ^ "\n..."
       else result.output in
       if result.is_error then
         Printf.printf "%s %s\n" (red "Error:") preview

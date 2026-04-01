@@ -5,6 +5,7 @@
 
 let dim s = Printf.sprintf "\027[2m%s\027[0m" s
 let yellow s = Printf.sprintf "\027[33m%s\027[0m" s
+let red s = Printf.sprintf "\027[31m%s\027[0m" s
 
 (** Check if a message contains tool use blocks. *)
 let has_tool_use (msg : Message.message) =
@@ -27,7 +28,8 @@ let build_body ~(config : Config.t) ~messages ~system_prompt =
   in
   Yojson.Safe.to_string (`Assoc parts)
 
-(** Stream a message from the API with tools. *)
+(** Stream a message from the API with tools.
+    Shows a spinner while waiting for first token. *)
 let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on_text () =
   let body = build_body ~config ~messages ~system_prompt in
   let url = Printf.sprintf "%s/v1/messages" config.base_url in
@@ -44,28 +46,62 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
      -H 'anthropic-version: %s' \
      -H 'content-type: application/json' \
      -H 'accept: text/event-stream' \
-     -d @%s 2>/dev/null"
+     -d @%s"
     url config.api_key Config.api_version tmp
   in
 
   let ic = Unix.open_process_in cmd in
+  (* Track pid for abort *)
+  let pid_cmd = Printf.sprintf "pgrep -f 'curl.*%s' 2>/dev/null | head -1" tmp in
+  let pid_ic = Unix.open_process_in pid_cmd in
+  (try
+    let pid_s = input_line pid_ic in
+    Client.current_curl_pid := Some (int_of_string (String.trim pid_s))
+  with _ -> ());
+  ignore (Unix.close_process_in pid_ic);
+
   let cur_event = ref "" in
   let cur_data = Buffer.create 512 in
   let tool_name_map = Hashtbl.create 4 in
+  let got_first_text = ref false in
+  let start_time = Unix.gettimeofday () in
+  let error_buf = Buffer.create 256 in
+
+  (* Show spinner *)
+  Printf.printf "\027[33m%s\027[0m" "⠋ ";
+  flush stdout;
 
   (try while true do
     let line = input_line ic in
     let line = String.trim line in
     if String.length line = 0 then begin
       if !cur_event <> "" && Buffer.length cur_data > 0 then begin
-        let ev = Streaming.parse_event
-          ~event_type:!cur_event ~data:(Buffer.contents cur_data) in
+        let data = Buffer.contents cur_data in
+        (* Check for API error *)
+        if not !got_first_text then begin
+          match Client.check_api_error data with
+          | Some (_, msg) ->
+            Buffer.add_string error_buf msg;
+            raise Exit
+          | None -> ()
+        end;
+        let ev = Streaming.parse_event ~event_type:!cur_event ~data in
         Streaming.update acc ev;
-        (* Print text deltas and track tool names *)
         (match ev with
-         | Streaming.ContentBlockDelta { delta = TextDelta t; _ } -> on_text t
+         | Streaming.ContentBlockDelta { delta = TextDelta t; _ } ->
+           if not !got_first_text then begin
+             (* Clear spinner, show elapsed time *)
+             let elapsed = Unix.gettimeofday () -. start_time in
+             Printf.printf "\r\027[K";
+             Printf.printf "%s " (dim (Printf.sprintf "[%.1fs]" elapsed));
+             got_first_text := true
+           end;
+           on_text t
          | Streaming.ContentBlockStart { index; block_type = "tool_use"; _ } ->
-           (* Extract tool name from the raw data *)
+           if not !got_first_text then begin
+             Printf.printf "\r\027[K";
+             got_first_text := true
+           end;
            let data = Buffer.contents cur_data in
            (try
              let json = Yojson.Safe.from_string data in
@@ -77,21 +113,34 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
         cur_event := "";
         Buffer.clear cur_data
       end
+    end else if String.length line > 0 && line.[0] = '{' && not !got_first_text then begin
+      (* Raw JSON error without SSE framing *)
+      match Client.check_api_error line with
+      | Some (_, msg) -> Buffer.add_string error_buf msg; raise Exit
+      | None -> ()
     end else if String.length line > 7 && String.sub line 0 7 = "event: " then
       cur_event := String.sub line 7 (String.length line - 7)
     else if String.length line > 6 && String.sub line 0 6 = "data: " then
       Buffer.add_string cur_data (String.sub line 6 (String.length line - 6))
-  done with End_of_file -> ());
+  done with
+  | End_of_file -> ()
+  | Exit -> ());
 
+  Client.current_curl_pid := None;
   ignore (Unix.close_process_in ic);
-  Sys.remove tmp;
+  (try Sys.remove tmp with _ -> ());
+
+  let err = Buffer.contents error_buf in
+  if String.length err > 0 then begin
+    Printf.printf "\r\027[K";
+    failwith err
+  end;
 
   (* Finalize and fix tool names *)
   let (msg, stop_reason, usage) = Streaming.finalize acc in
   let fixed_content = List.mapi (fun _i block ->
     match block with
     | Message.ToolUse { id; name = _; input } ->
-      (* Find the correct tool name from our tracking *)
       let real_name =
         Hashtbl.fold (fun _idx n found ->
           match found with Some _ -> found | None -> Some n
@@ -112,8 +161,15 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
     flush stdout;
 
     let (response, _stop, usage) =
-      stream_with_tools ~config ~messages:!msgs ~system_prompt
-        ~on_text:(fun t -> print_string t; flush stdout) ()
+      try
+        stream_with_tools ~config ~messages:!msgs ~system_prompt
+          ~on_text:(fun t -> print_string t; flush stdout) ()
+      with Failure msg ->
+        Printf.printf "\n%s %s\n" (red "Error:") msg;
+        flush stdout;
+        (* Return an error as assistant message so conversation can continue *)
+        let err_msg = Message.{ role = Assistant; content = [Text (Printf.sprintf "[API Error: %s]" msg)] } in
+        (err_msg, None, Message.empty_usage)
     in
 
     Printf.printf "\n";
@@ -122,7 +178,6 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
 
     msgs := !msgs @ [response];
 
-    (* If the model used tools, execute them and loop *)
     if has_tool_use response then begin
       Printf.printf "\n";
       let cwd = Sys.getcwd () in
