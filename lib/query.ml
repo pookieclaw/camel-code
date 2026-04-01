@@ -66,7 +66,7 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
 
   let cur_event = ref "" in
   let cur_data = Buffer.create 512 in
-  let tool_name_map = Hashtbl.create 4 in
+  let _tool_name_map_unused = () in  (* tool names now stored in acc.tool_names *)
   let got_first_text = ref false in
   let start_time = Unix.gettimeofday () in
   let error_buf = Buffer.create 256 in
@@ -105,12 +105,12 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
              Printf.printf "\r\027[K";
              got_first_text := true
            end;
-           let data = Buffer.contents cur_data in
+           (* Extract tool name and store in accumulator *)
            (try
              let json = Yojson.Safe.from_string data in
              let cb = Yojson.Safe.Util.member "content_block" json in
              let name = Yojson.Safe.Util.(cb |> member "name" |> to_string) in
-             Hashtbl.replace tool_name_map index name
+             Hashtbl.replace acc.Streaming.tool_names index name
            with _ -> ())
          | _ -> ());
         cur_event := "";
@@ -140,22 +140,8 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
     failwith err
   end;
 
-  (* Finalize and fix tool names *)
-  let (msg, stop_reason, usage) = Streaming.finalize acc in
-  let tool_idx = ref 0 in
-  let fixed_content = List.map (fun block ->
-    match block with
-    | Message.ToolUse { id; name = _; input } ->
-      let real_name =
-        match Hashtbl.find_opt tool_name_map !tool_idx with
-        | Some n -> n
-        | None -> "unknown"
-      in
-      incr tool_idx;
-      Message.ToolUse { id; name = real_name; input }
-    | other -> other
-  ) msg.content in
-  (Message.{ msg with content = fixed_content }, stop_reason, usage)
+  (* Finalize — tool names are resolved inside Streaming.finalize via acc.tool_names *)
+  Streaming.finalize acc
 
 (** Main agentic query loop. *)
 let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =

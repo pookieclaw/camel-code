@@ -3,7 +3,7 @@ opam-version: "2.0"
 synopsis: "Terminal AI coding assistant in OCaml"
 description:
   "An independent terminal AI coding assistant built with OCaml 5. Uses the Anthropic Messages API. Not affiliated with Anthropic."
-authors: ["Liam Nguyen"]
+authors: ["Camel Code Contributors"]
 license: "MIT"
 homepage: "https://github.com/liam/camel-code"
 bug-reports: "https://github.com/liam/camel-code/issues"

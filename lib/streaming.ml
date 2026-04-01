@@ -85,6 +85,7 @@ type accumulator = {
   mutable blocks : (int * Buffer.t * string * string option) list;
   mutable stop_reason : Message.stop_reason option;
   mutable usage : Message.usage;
+  tool_names : (int, string) Hashtbl.t;  (** index -> tool name *)
 }
 
 let create_accumulator () = {
@@ -92,6 +93,7 @@ let create_accumulator () = {
   blocks = [];
   stop_reason = None;
   usage = Message.empty_usage;
+  tool_names = Hashtbl.create 4;
 }
 
 let update acc = function
@@ -113,15 +115,18 @@ let update acc = function
 
 let finalize acc =
   let sorted = List.sort (fun (a, _, _, _) (b, _, _, _) -> compare a b) acc.blocks in
-  let content = List.filter_map (fun (_idx, buf, btype, id) ->
+  let content = List.filter_map (fun (idx, buf, btype, id) ->
     let text = Buffer.contents buf in
     match btype with
     | "text" -> Some (Message.Text text)
     | "tool_use" ->
       let input = try Yojson.Safe.from_string text with _ -> `Assoc [] in
       let tool_id = Option.value id ~default:"unknown" in
-      (* tool name is stored in ContentBlockStart, extract from accumulated JSON *)
-      Some (Message.ToolUse { id = tool_id; name = "unknown"; input })
+      let name = match Hashtbl.find_opt acc.tool_names idx with
+        | Some n -> n
+        | None -> "unknown"
+      in
+      Some (Message.ToolUse { id = tool_id; name; input })
     | "thinking" -> Some (Message.Thinking text)
     | _ -> None
   ) sorted in
