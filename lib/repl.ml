@@ -20,14 +20,12 @@ let whoami () =
   name
 
 let print_banner ~model ~auto_approve =
-  let mode_str = if auto_approve then "auto-approve" else "ask" in
+  let mode_str = if auto_approve then "auto" else "ask" in
   let branch_str = match git_branch () with
-    | Some b -> Printf.sprintf " · %s" b
+    | Some b -> Printf.sprintf " \xC2\xB7 %s" b
     | None -> ""
   in
   let user = whoami () in
-  (* Use yellow/amber for the border and sprite *)
-  let y s = Printf.sprintf "\027[33m%s\027[0m" s in
   let cwd = Sys.getcwd () in
   let short_cwd =
     let home = match Sys.getenv_opt "HOME" with Some h -> h | None -> "" in
@@ -37,76 +35,68 @@ let print_banner ~model ~auto_approve =
     else cwd
   in
 
+  (* Use absolute cursor positioning for right border — immune to ANSI width issues *)
+  let w = 52 in  (* box inner width *)
+  let col_r = w + 4 in  (* right border column *)
+
+  let border s = Printf.sprintf "\027[33m%s\027[0m" s in
+  let sand s = Printf.sprintf "\027[38;2;194;154;88m%s\027[0m" s in
+
+  (* Helper: print bordered row with content, right border at fixed column *)
+  let row content =
+    Printf.printf "  %s %s\027[%dG%s\n" (border "\xE2\x94\x82") content col_r (border "\xE2\x94\x82")
+  in
+  let empty_row () = row "" in
+
   Printf.printf "\n";
+
   (* Top border with title *)
-  Printf.printf "  %s %s %s\n"
-    (y "──")
-    (bold (Printf.sprintf "Camel Code v0.1"))
-    (y (String.make 30 '-'));
+  let title = "Camel Code v0.1" in
+  let title_len = String.length title in
+  let fill = w - title_len - 2 in
+  Printf.printf "  %s %s %s%s\n"
+    (border "\xE2\x94\x8C\xE2\x94\x80")
+    (bold title)
+    (border (String.init fill (fun _ -> '\xE2') |> fun _ ->
+      let buf = Buffer.create (fill * 3) in
+      for _ = 1 to fill do Buffer.add_string buf "\xE2\x94\x80" done;
+      Buffer.contents buf))
+    (border "\xE2\x94\x90");
 
-  (* Box top *)
-  Printf.printf "  %s%s%s\n"
-    (y "|")
-    (String.make 48 ' ')
-    (y "|");
+  empty_row ();
 
-  (* Welcome message *)
-  let welcome = Printf.sprintf "Welcome back %s!" user in
-  let pad = (48 - String.length welcome) / 2 in
-  Printf.printf "  %s%s%s%s%s\n"
-    (y "|")
-    (String.make pad ' ')
-    (bold welcome)
-    (String.make (48 - pad - String.length welcome) ' ')
-    (y "|");
+  (* Welcome *)
+  let welcome = Printf.sprintf "%s" (bold (Printf.sprintf "Welcome back %s!" user)) in
+  row (Printf.sprintf "%*s%s" ((w - String.length (Printf.sprintf "Welcome back %s!" user)) / 2) "" welcome);
 
-  Printf.printf "  %s%s%s\n" (y "|") (String.make 48 ' ') (y "|");
+  empty_row ();
 
-  (* Camel sprite — centered, amber colored *)
-  let sprite = [
-    "    @@  @@";
-    "   @@@@@@@@";
-    "   @  @  @@";
-    "    ||  ||";
+  (* Camel sprite — block characters *)
+  let sprite_lines = [
+    "   \xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88";
+    "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88";
+    "  \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88";
   ] in
-  List.iter (fun line ->
-    let slen = String.length line in
-    let lpad = (48 - slen) / 2 in
-    let rpad = 48 - lpad - slen in
-    Printf.printf "  %s%s%s%s%s\n"
-      (y "|")
-      (String.make lpad ' ')
-      (Printf.sprintf "\027[38;2;194;154;88m%s\027[0m" line)
-      (String.make rpad ' ')
-      (y "|")
-  ) sprite;
+  List.iter (fun s ->
+    row (Printf.sprintf "%*s%s" 20 "" (sand s))
+  ) sprite_lines;
 
-  Printf.printf "  %s%s%s\n" (y "|") (String.make 48 ' ') (y "|");
+  empty_row ();
 
-  (* Model + mode line *)
-  let info = Printf.sprintf "%s · %s%s" mode_str model branch_str in
-  let ipad = (48 - String.length info) / 2 in
-  Printf.printf "  %s%s%s%s%s\n"
-    (y "|")
-    (String.make (max 1 ipad) ' ')
-    (yellow info)
-    (String.make (max 1 (48 - ipad - String.length info)) ' ')
-    (y "|");
+  (* Model info *)
+  let info = Printf.sprintf "%s \xC2\xB7 %s%s" mode_str model branch_str in
+  row (Printf.sprintf "%*s%s" (max 1 ((w - String.length info) / 2)) "" (yellow info));
 
-  (* Cwd line *)
-  let cpad = (48 - String.length short_cwd) / 2 in
-  Printf.printf "  %s%s%s%s%s\n"
-    (y "|")
-    (String.make (max 1 cpad) ' ')
-    (dim short_cwd)
-    (String.make (max 1 (48 - cpad - String.length short_cwd)) ' ')
-    (y "|");
+  (* Cwd *)
+  row (Printf.sprintf "%*s%s" (max 1 ((w - String.length short_cwd) / 2)) "" (dim short_cwd));
 
   (* Bottom border *)
+  let bot = Buffer.create (w * 3) in
+  for _ = 1 to w + 1 do Buffer.add_string bot "\xE2\x94\x80" done;
   Printf.printf "  %s%s%s\n"
-    (y "|")
-    (y (String.make 48 '-'))
-    (y "|");
+    (border "\xE2\x94\x94")
+    (border (Buffer.contents bot))
+    (border "\xE2\x94\x98");
 
   Printf.printf "\n";
   flush stdout
