@@ -1,0 +1,26 @@
+{
+  "name": "Camel Code - OCaml 5.2",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "opam",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ocamllabs.ocaml-platform"
+      ],
+      "settings": {
+        "ocaml.sandbox": {
+          "kind": "opam",
+          "switch": "default"
+        }
+      }
+    }
+  },
+  "postCreateCommand": "eval $(opam env) && opam install . --deps-only -y && dune build",
+  "forwardPorts": [],
+  "mounts": []
+}

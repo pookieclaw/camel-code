@@ -1,0 +1,30 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main, "phase-*/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ocaml/opam:ubuntu-24.04-ocaml-5.2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          opam install . --deps-only -y
+          eval $(opam env)
+
+      - name: Build
+        run: |
+          eval $(opam env)
+          dune build
+
+      - name: Test
+        run: |
+          eval $(opam env)
+          dune test

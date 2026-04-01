@@ -1,0 +1,5 @@
+(library
+ (name camel_lib)
+ (libraries eio_main yojson fmt logs)
+ (preprocess
+  (pps ppx_deriving_yojson)))
