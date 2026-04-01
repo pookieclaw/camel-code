@@ -51,91 +51,10 @@ let read_byte () =
   let _ = Unix.read Unix.stdin b 0 1 in
   Bytes.get b 0
 
-(** Clear hint lines below the input. *)
-let clear_hints t =
-  if t.hint_lines > 0 then begin
-    (* Save cursor, move down and clear each hint line, restore *)
-    Printf.printf "\027[s";
-    for _ = 1 to t.hint_lines do
-      Printf.printf "\n\027[2K"
-    done;
-    Printf.printf "\027[u";
-    t.hint_lines <- 0;
-    flush stdout
-  end
-
-(** Show matching slash command hints below the input line. *)
-let show_hints t =
-  let text = Buffer.contents t.buf in
-  if String.length text > 0 && text.[0] = '/' then begin
-    let prefix = String.lowercase_ascii text in
-    let matches = List.filter (fun cmd ->
-      let full = "/" ^ cmd in
-      String.length full >= String.length prefix &&
-      String.sub (String.lowercase_ascii full) 0 (String.length prefix) = prefix
-      && full <> text  (* don't hint exact match *)
-    ) t.completions in
-    let to_show = if List.length matches > 5 then
-      List.filteri (fun i _ -> i < 5) matches
-    else matches in
-    if to_show <> [] then begin
-      (* Save cursor position *)
-      Printf.printf "\027[s";
-      let n = ref 0 in
-      List.iter (fun cmd ->
-        Printf.printf "\n\027[K  %s %s"
-          (yellow (Printf.sprintf "/%s" cmd))
-          (dim (Printf.sprintf "— %s"
-            (match cmd with
-             | "help" -> "Show commands"
-             | "clear" -> "Clear conversation"
-             | "compact" -> "Compress history"
-             | "cost" -> "Token usage"
-             | "stats" -> "Session statistics"
-             | "exit" | "quit" -> "Exit"
-             | "model" -> "Change model"
-             | "config" -> "Show settings"
-             | "effort" -> "Reasoning effort"
-             | "fast" -> "Toggle fast mode"
-             | "theme" -> "Color theme"
-             | "vim" -> "Toggle vim mode"
-             | "version" -> "Show version"
-             | "session" -> "Session info"
-             | "resume" -> "Resume session"
-             | "export" -> "Export conversation"
-             | "memory" -> "Memory files"
-             | "diff" -> "Git diff"
-             | "commit" -> "Commit changes"
-             | "branch" -> "Git branches"
-             | "status" -> "Git status"
-             | "plan" -> "Plan mode"
-             | "permissions" -> "Permission rules"
-             | "mcp" -> "MCP servers"
-             | "skills" -> "Installed skills"
-             | "agents" -> "Agent definitions"
-             | "tasks" -> "Task list"
-             | "hooks" -> "Configured hooks"
-             | "doctor" -> "Run diagnostics"
-             | "login" -> "OAuth login"
-             | "cls" -> "Clear screen"
-             | "add-dir" -> "Add directory"
-             | _ -> "")));
-        incr n
-      ) to_show;
-      t.hint_lines <- !n;
-      (* Restore cursor position *)
-      Printf.printf "\027[u";
-      flush stdout
-    end else begin
-      clear_hints t;
-      flush stdout
-    end
-  end else begin
-    if t.hint_lines > 0 then begin
-      clear_hints t;
-      flush stdout
-    end
-  end
+(** No dropdown hints — just inline ghost text.
+    This avoids the stale-hint rendering bugs entirely. *)
+let clear_hints _t = ()
+let show_hints _t = ()
 
 (** Get the top completion match for Tab. *)
 let top_completion t =
@@ -277,7 +196,9 @@ let read_line t ~prompt =
       show_hints t
 
     | 10 | 13 (* Enter *) ->
-      clear_hints t;
+      (* Clear the line completely before submitting — removes ghost text *)
+      Printf.printf "\r\027[K";
+      flush stdout;
       let text = String.trim (Buffer.contents t.buf) in
       let raw = Buffer.contents t.buf in
       if String.length raw > 0 && raw.[String.length raw - 1] = '\\' then begin
