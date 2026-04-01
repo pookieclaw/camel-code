@@ -11,14 +11,14 @@ let thin_line () =
 let print_banner ~model ~auto_approve =
   let mode_str = if auto_approve then " · auto" else "" in
   (* Camel pixel sprite using block elements — yellow/amber colored *)
-  (* 3-line camel pixel sprite, sand/amber colored *)
-  let p = Printf.printf in
-  let s = "\027[38;2;194;154;88m" in
+  (* Sand-colored camel using half-block pixel art *)
+  (* Colors: fg=sand for upper half-block, bg for lower *)
+  let s = "\027[38;2;194;154;88m" in  (* sand foreground *)
   let r = "\027[0m" in
-  p "\n";
-  p "    %s\xE2\x96\x88\xE2\x96\x80\xE2\x96\x80\xE2\x96\x88%s      %s\n" s r (bold "Camel Code v0.1");
-  p "    %s\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88%s    %s%s\n" s r (dim model) (dim mode_str);
-  p "    %s\xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88%s    %s\n" s r (dim (Sys.getcwd ()));
+  Printf.printf "\n";
+  Printf.printf "    %s  \xE2\x96\x84\xE2\x96\x84%s          %s\n" s r (bold "Camel Code v0.1");
+  Printf.printf "    %s \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x84\xE2\x96\x84%s    %s%s\n" s r (dim model) (dim mode_str);
+  Printf.printf "    %s\xE2\x96\x80\xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88\xE2\x96\x80\xE2\x96\x80%s    %s\n" s r (dim (Sys.getcwd ()));
   Printf.printf "\n";
   flush stdout
 
