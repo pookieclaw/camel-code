@@ -19,6 +19,40 @@ let whoami () =
   ignore (Unix.close_process_in ic);
   name
 
+(** Card renderer using pomo technique:
+    - COL_RIGHT computed from widest visible content
+    - \033[NG places right border at absolute column
+    - Top/bottom borders use exact character repetition *)
+
+let display_width s =
+  (* Count visible display columns, skipping ANSI escape sequences *)
+  let len = String.length s in
+  let w = ref 0 in
+  let i = ref 0 in
+  while !i < len do
+    if !i < len && s.[!i] = '\027' then begin
+      (* Skip escape sequence *)
+      incr i;
+      if !i < len && s.[!i] = '[' then begin
+        incr i;
+        while !i < len && s.[!i] <> 'm' && s.[!i] <> 'G' && s.[!i] <> 'K' do incr i done;
+        if !i < len then incr i
+      end
+    end else begin
+      let c = Char.code s.[!i] in
+      if c < 0x80 then begin w := !w + 1; incr i end
+      else if c >= 0xF0 then begin w := !w + 2; i := !i + 4 end  (* 4-byte = likely emoji = 2 cols *)
+      else if c >= 0xE0 then begin w := !w + 1; i := !i + 3 end  (* 3-byte UTF-8 = 1 col *)
+      else begin w := !w + 1; i := !i + 2 end  (* 2-byte UTF-8 *)
+    end
+  done;
+  !w
+
+let repeat_char s n =
+  let buf = Buffer.create (n * String.length s) in
+  for _ = 1 to n do Buffer.add_string buf s done;
+  Buffer.contents buf
+
 let print_banner ~model ~auto_approve =
   let mode_str = if auto_approve then "auto" else "ask" in
   let branch_str = match git_branch () with
@@ -35,12 +69,72 @@ let print_banner ~model ~auto_approve =
     else cwd
   in
 
+  let y s = Printf.sprintf "\027[33m%s\027[0m" s in  (* yellow *)
+  let sand s = Printf.sprintf "\027[38;2;194;154;88m%s\027[0m" s in
+
+  (* Content lines with their visible display widths *)
+  let welcome = Printf.sprintf "Welcome back %s!" user in
+  let info_line = Printf.sprintf "%s \xC2\xB7 %s%s" mode_str model branch_str in
+  let sprite = [| "  \xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88"; "  \xE2\x96\x88\xE2\x96\x88 \xE2\x96\x88\xE2\x96\x88" |] in
+
+  (* Compute widest visible content *)
+  let widths = [
+    String.length welcome;
+    String.length info_line;
+    String.length short_cwd;
+    8;  (* sprite is ~8 display cols *)
+  ] in
+  let max_w = List.fold_left max 20 widths in
+  let card_w = max_w + 4 in  (* 2 padding each side *)
+  let col_right = card_w + 1 in
+
+  let card_line content =
+    Printf.printf "%s %s\027[%dG%s\n"
+      (y "\xE2\x94\x82") content col_right (y "\xE2\x94\x82")
+  in
+  let blank () = card_line "" in
+
+  let label = "Camel Code v0.1" in
+  let label_dashes = card_w - String.length label - 4 in
+
   Printf.printf "\n";
-  Printf.printf "    %s  %s\n" (bold "Camel Code") (dim "v0.1");
-  Printf.printf "    %s %s%s\n" (yellow model) (yellow mode_str) (yellow branch_str);
-  Printf.printf "    %s\n" (dim short_cwd);
-  Printf.printf "\n";
-  Printf.printf "    %s\n" (bold (Printf.sprintf "Welcome back %s!" user));
+
+  (* Top: ╭─ label ───╮ *)
+  Printf.printf "%s %s %s%s\n"
+    (y (Printf.sprintf "\xE2\x94\x8C\xE2\x94\x80"))
+    (bold label)
+    (y (repeat_char "\xE2\x94\x80" (max 1 label_dashes)))
+    (y "\xE2\x94\x90");
+
+  blank ();
+
+  (* Welcome centered *)
+  let wpad = (max_w - String.length welcome) / 2 + 1 in
+  card_line (Printf.sprintf "%s%s" (String.make wpad ' ') (bold welcome));
+
+  blank ();
+
+  (* Camel sprite centered *)
+  Array.iter (fun s ->
+    let spad = (max_w - 8) / 2 + 1 in  (* sprite ~8 display cols *)
+    card_line (Printf.sprintf "%s%s" (String.make spad ' ') (sand s))
+  ) sprite;
+
+  blank ();
+
+  (* Model info centered *)
+  let ipad = (max_w - String.length info_line) / 2 + 1 in
+  card_line (Printf.sprintf "%s%s" (String.make ipad ' ') (yellow info_line));
+
+  (* Cwd centered *)
+  let cpad = (max_w - String.length short_cwd) / 2 + 1 in
+  card_line (Printf.sprintf "%s%s" (String.make cpad ' ') (dim short_cwd));
+
+  (* Bottom: ╰───╯ *)
+  Printf.printf "%s%s\n"
+    (y (Printf.sprintf "\xE2\x94\x94%s" (repeat_char "\xE2\x94\x80" (card_w - 1))))
+    (y "\xE2\x94\x98");
+
   Printf.printf "\n";
   flush stdout
 
