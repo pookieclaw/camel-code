@@ -27,14 +27,17 @@ let add_history t line =
   end
 
 let enable_raw () =
-  let open Unix in
-  let old = tcgetattr stdin in
-  let raw = { old with c_icanon = false; c_echo = false; c_isig = true; c_vmin = 1; c_vtime = 0 } in
-  tcsetattr stdin TCSANOW raw;
-  old
+  try
+    let open Unix in
+    let old = tcgetattr stdin in
+    let raw = { old with c_icanon = false; c_echo = false; c_isig = true; c_vmin = 1; c_vtime = 0 } in
+    tcsetattr stdin TCSANOW raw;
+    Some old
+  with _ -> None
 
-let restore term =
-  Unix.tcsetattr Unix.stdin Unix.TCSANOW term
+let restore = function
+  | Some term -> Unix.tcsetattr Unix.stdin Unix.TCSANOW term
+  | None -> ()
 
 (** Read one byte. *)
 let read_byte () =
@@ -118,6 +121,18 @@ let read_line t ~prompt =
   flush stdout;
 
   let old_term = enable_raw () in
+  if old_term = None then begin
+    (* Fallback: not a terminal, use basic input_line *)
+    try
+      let line = Stdlib.input_line Stdlib.stdin in
+      let trimmed = String.trim line in
+      if String.length trimmed > 0 then begin
+        add_history t trimmed;
+        Some trimmed
+      end else Some ""
+    with End_of_file -> None
+  end else
+
   let result = ref None in
   let done_ = ref false in
 

@@ -13,18 +13,101 @@ let git_branch () =
   ignore (Unix.close_process_in ic);
   branch
 
+let whoami () =
+  let ic = Unix.open_process_in "whoami 2>/dev/null" in
+  let name = try String.trim (input_line ic) with _ -> "user" in
+  ignore (Unix.close_process_in ic);
+  name
+
 let print_banner ~model ~auto_approve =
-  let mode_str = if auto_approve then " · auto" else "" in
+  let mode_str = if auto_approve then "auto-approve" else "ask" in
   let branch_str = match git_branch () with
     | Some b -> Printf.sprintf " · %s" b
     | None -> ""
   in
-  let s = "\027[38;2;194;154;88m" in
-  let r = "\027[0m" in
+  let user = whoami () in
+  (* Use yellow/amber for the border and sprite *)
+  let y s = Printf.sprintf "\027[33m%s\027[0m" s in
+  let cwd = Sys.getcwd () in
+  let short_cwd =
+    let home = match Sys.getenv_opt "HOME" with Some h -> h | None -> "" in
+    if String.length home > 0 && String.length cwd >= String.length home
+       && String.sub cwd 0 (String.length home) = home then
+      "~" ^ String.sub cwd (String.length home) (String.length cwd - String.length home)
+    else cwd
+  in
+
   Printf.printf "\n";
-  Printf.printf "    %s  \xE2\x96\x84\xE2\x96\x84%s          %s\n" s r (bold "Camel Code v0.1");
-  Printf.printf "    %s \xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x88\xE2\x96\x84\xE2\x96\x84%s    %s%s\n" s r (dim model) (dim (mode_str ^ branch_str));
-  Printf.printf "    %s\xE2\x96\x80\xE2\x96\x88\xE2\x96\x80 \xE2\x96\x80\xE2\x96\x88\xE2\x96\x80\xE2\x96\x80%s    %s\n" s r (dim (Sys.getcwd ()));
+  (* Top border with title *)
+  Printf.printf "  %s %s %s\n"
+    (y "──")
+    (bold (Printf.sprintf "Camel Code v0.1"))
+    (y (String.make 30 '-'));
+
+  (* Box top *)
+  Printf.printf "  %s%s%s\n"
+    (y "|")
+    (String.make 48 ' ')
+    (y "|");
+
+  (* Welcome message *)
+  let welcome = Printf.sprintf "Welcome back %s!" user in
+  let pad = (48 - String.length welcome) / 2 in
+  Printf.printf "  %s%s%s%s%s\n"
+    (y "|")
+    (String.make pad ' ')
+    (bold welcome)
+    (String.make (48 - pad - String.length welcome) ' ')
+    (y "|");
+
+  Printf.printf "  %s%s%s\n" (y "|") (String.make 48 ' ') (y "|");
+
+  (* Camel sprite — centered, amber colored *)
+  let sprite = [
+    "    @@  @@";
+    "   @@@@@@@@";
+    "   @  @  @@";
+    "    ||  ||";
+  ] in
+  List.iter (fun line ->
+    let slen = String.length line in
+    let lpad = (48 - slen) / 2 in
+    let rpad = 48 - lpad - slen in
+    Printf.printf "  %s%s%s%s%s\n"
+      (y "|")
+      (String.make lpad ' ')
+      (Printf.sprintf "\027[38;2;194;154;88m%s\027[0m" line)
+      (String.make rpad ' ')
+      (y "|")
+  ) sprite;
+
+  Printf.printf "  %s%s%s\n" (y "|") (String.make 48 ' ') (y "|");
+
+  (* Model + mode line *)
+  let info = Printf.sprintf "%s · %s%s" mode_str model branch_str in
+  let ipad = (48 - String.length info) / 2 in
+  Printf.printf "  %s%s%s%s%s\n"
+    (y "|")
+    (String.make (max 1 ipad) ' ')
+    (yellow info)
+    (String.make (max 1 (48 - ipad - String.length info)) ' ')
+    (y "|");
+
+  (* Cwd line *)
+  let cpad = (48 - String.length short_cwd) / 2 in
+  Printf.printf "  %s%s%s%s%s\n"
+    (y "|")
+    (String.make (max 1 cpad) ' ')
+    (dim short_cwd)
+    (String.make (max 1 (48 - cpad - String.length short_cwd)) ' ')
+    (y "|");
+
+  (* Bottom border *)
+  Printf.printf "  %s%s%s\n"
+    (y "|")
+    (y (String.make 48 '-'))
+    (y "|");
+
   Printf.printf "\n";
   flush stdout
 
@@ -66,7 +149,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   while !go do
     match Input.read_line input_state ~prompt:prompt_str with
     | None -> go := false
-    | Some "" -> ()  (* empty input, skip *)
+    | Some "" -> ()
     | Some input ->
       let input = if String.length input = 1 && Char.code input.[0] = 12 then "/cls" else input in
       (match Commands.dispatch input ~messages:!msgs ~cost_tracker:ct with
@@ -83,13 +166,11 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          msgs := !msgs @ [user_msg];
          msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
          Printf.printf "\n";
-         (* Compact warning — estimate tokens from message count *)
          let msg_count = List.length !msgs in
          if msg_count > 40 then
            Printf.printf "  %s\n" (dim (Printf.sprintf "! %d messages — consider /compact or /clear" msg_count))
          else if msg_count > 20 then
            Printf.printf "  %s\n" (dim (Printf.sprintf "%d messages in context" msg_count));
-         (* Footer: model · session · token count *)
          Printf.printf "  %s\n" (dim (Printf.sprintf "%s · session %s"
            config.model (String.sub session_id 0 (min 8 (String.length session_id)))));
          thin_line ();
