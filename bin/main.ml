@@ -19,4 +19,5 @@ let () =
   | Some prompt ->
     Repl.run_single ~config ~prompt ~auto_approve:args.yes
   | None ->
-    Repl.run ~config ~auto_approve:args.yes
+    (* Use TUI in interactive mode, basic REPL as fallback *)
+    Tui_app.run ~config ~auto_approve:args.yes
