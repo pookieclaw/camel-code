@@ -8,7 +8,7 @@ An unofficial, independent terminal AI coding assistant written in OCaml. Inspir
 
 ## Demo
 
-https://github.com/user-attachments/assets/REPLACE_WITH_VIDEO_URL
+https://github.com/pookieclaw/camel-code/raw/main/docs/demo.mov
 
 > *Version check, diagnostics, single-shot query, file write/read with tools, bash execution, file editing, and interactive REPL with slash commands.*
 
