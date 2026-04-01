@@ -180,7 +180,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
        | Some Commands.Exit -> go := false
        | Some Commands.ClearMessages ->
          echo_input ~tw input_clean;
-         Printf.printf "  \xE2\x94\x94 %s\n\n" (dim "Cleared");
+         Printf.printf "  \xE2\x8E\xBF %s\n\n" (dim "Cleared");
          msgs := [];
          flush stdout
        | Some (Commands.ShowMessage s) ->
@@ -189,13 +189,13 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          (match lines with
           | [] -> ()
           | first :: rest ->
-            Printf.printf "  \xE2\x94\x94 %s\n" (dim first);
+            Printf.printf "  \xE2\x8E\xBF %s\n" (dim first);
             List.iter (fun l -> Printf.printf "    %s\n" (dim l)) rest);
          Printf.printf "\n";
          flush stdout
        | Some (Commands.SwitchModel _m) ->
          echo_input ~tw input_clean;
-         Printf.printf "  \xE2\x94\x94 %s\n\n" (dim "Model switching not yet supported");
+         Printf.printf "  \xE2\x8E\xBF %s\n\n" (dim "Model switching not yet supported");
          flush stdout
        | Some Commands.Continue ->
          echo_input ~tw input_clean;

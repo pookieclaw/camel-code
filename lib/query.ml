@@ -67,8 +67,8 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
   let start_time = Unix.gettimeofday () in
   let error_buf = Buffer.create 256 in
 
-  (* Show thinking indicator *)
-  Printf.printf "\027[2mThinking...\027[0m";
+  (* Show thinking indicator with ⎿ connector *)
+  Printf.printf "  \xE2\x8E\xBF \027[2mThinking...\027[0m";
   flush stdout;
 
   (try while true do
@@ -90,10 +90,9 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
         (match ev with
          | Streaming.ContentBlockDelta { delta = TextDelta t; _ } ->
            if not !got_first_text then begin
-             (* Clear spinner, show elapsed time *)
+             (* Clear spinner, show elapsed time with connector *)
              let elapsed = Unix.gettimeofday () -. start_time in
-             Printf.printf "\r\027[K";
-             Printf.printf "%s " (dim (Printf.sprintf "[%.1fs]" elapsed));
+             Printf.printf "\r\027[K  \xE2\x8E\xBF %s " (dim (Printf.sprintf "[%.1fs]" elapsed));
              got_first_text := true
            end;
            on_text t

@@ -51,8 +51,8 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
   | Some (module T : S) ->
     let desc = T.describe_call ~input in
 
-    (* Tool call header *)
-    Printf.printf "\n  %s %s\n" (cyan ">") (bold (cyan desc));
+    (* Tool call header with ⎿ connector *)
+    Printf.printf "\n  \xE2\x8E\xBF %s %s\n" (cyan "\xE2\x97\x8F") (bold (cyan desc));
     flush stdout;
 
     (* Check permission *)
