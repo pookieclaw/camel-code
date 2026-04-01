@@ -4,29 +4,22 @@ let bold s = Printf.sprintf "\027[1m%s\027[0m" s
 let dim s = Printf.sprintf "\027[2m%s\027[0m" s
 let green s = Printf.sprintf "\027[32m%s\027[0m" s
 let blue s = Printf.sprintf "\027[34m%s\027[0m" s
-let cyan s = Printf.sprintf "\027[36m%s\027[0m" s
+let yellow s = Printf.sprintf "\027[33m%s\027[0m" s
 
-let separator () =
-  Printf.printf "  %s\n" (dim "────────────────────────────────")
+let thin_line () =
+  Printf.printf "%s\n" (dim "───────────────────────────────────────────────────────────")
 
 let print_banner ~model ~auto_approve =
+  let mode = if auto_approve then " · auto-approve" else "" in
   Printf.printf "\n";
-  let yellow s = Printf.sprintf "\027[33m%s\027[0m" s in
-  Printf.printf "\n  %s  %s\n" (yellow "🐫") (bold (yellow "Camel Code v0.1"));
-  Printf.printf "\n";
-  Printf.printf "  %s %s\n" (dim "model:") (green model);
-  let tool_count = List.length (Tool_registry.tool_names ()) in
-  Printf.printf "  %s %s\n" (dim "tools:") (green (Printf.sprintf "%d tools available" tool_count));
-  if auto_approve then
-    Printf.printf "  %s %s\n" (dim "mode:") (green "auto-approve");
-  Printf.printf "  %s %s\n" (dim "cwd:") (dim (Sys.getcwd ()));
-  Printf.printf "\n";
-  separator ();
+  Printf.printf "  %s    %s\n" (yellow "╭───╮") (bold "Camel Code v0.1");
+  Printf.printf "  %s    %s%s\n" (yellow "│🐫 │") (dim model) (dim mode);
+  Printf.printf "  %s    %s\n" (yellow "╰───╯") (dim (Sys.getcwd ()));
   Printf.printf "\n";
   flush stdout
 
 let read_prompt () =
-  Printf.printf "%s " (bold (blue ">"));
+  Printf.printf "%s " (bold ">");
   flush stdout;
   try
     let line = input_line stdin in
@@ -35,12 +28,10 @@ let read_prompt () =
     else Some trimmed
   with End_of_file -> None
 
-(** Track Ctrl-C timing for double-tap exit. *)
-let last_interrupt = ref 0.0
-
 let reset_terminal () =
-  (* Restore terminal to sane state on exit *)
   ignore (Sys.command "stty sane 2>/dev/null")
+
+let last_interrupt = ref 0.0
 
 let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   print_banner ~model:config.model ~auto_approve;
@@ -50,19 +41,14 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
   let msgs = ref initial_messages in
 
-  (* Ensure terminal is restored on exit *)
   at_exit reset_terminal;
 
-  (* Ctrl-C handler: abort stream first time, exit on double-tap *)
   Sys.set_signal Sys.sigint (Sys.Signal_handle (fun _ ->
     let now = Unix.gettimeofday () in
     Client.abort_stream ();
     if now -. !last_interrupt < 1.0 then begin
       reset_terminal ();
-      Printf.printf "\n\n";
-      separator ();
-      Printf.printf "%s\n" (dim (Cost_tracker.summary ct));
-      Printf.printf "%s\n" (dim "Goodbye! 🐫");
+      Printf.printf "\n\n%s\n" (dim (Cost_tracker.summary ct));
       flush stdout;
       exit 0
     end else begin
@@ -90,14 +76,13 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          let user_msg = Message.{ role = User; content = [Text input] } in
          msgs := !msgs @ [user_msg];
          msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
-         separator ();
+         Printf.printf "\n";
+         thin_line ();
+         Printf.printf "\n";
          Session.save ~id:session_id ~model:config.model ~messages:!msgs)
   done;
 
-  Printf.printf "\n";
-  separator ();
-  Printf.printf "%s\n" (dim (Cost_tracker.summary ct));
-  Printf.printf "%s\n" (dim "Goodbye! 🐫")
+  Printf.printf "\n%s\n" (dim (Cost_tracker.summary ct))
 
 let run_single ~config ~prompt ~auto_approve =
   let ct = Cost_tracker.create ~model:config.Config.model in
