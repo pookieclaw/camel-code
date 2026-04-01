@@ -1,4 +1,4 @@
-(executable
- (name main)
- (public_name camel)
+(executables
+ (names main tui_test)
+ (public_names camel camel-tui-test)
  (libraries camel_lib))
