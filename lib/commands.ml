@@ -131,8 +131,16 @@ let cmd_vim = {
     ShowMessage "Vim mode toggled. (Restart to apply)"
 }
 
+let cmd_cls = {
+  name = "cls";
+  description = "Clear screen";
+  execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
+    ignore (Sys.command "clear 2>/dev/null || printf '\\033[2J\\033[H'");
+    Continue
+}
+
 let all_commands = [
-  cmd_help; cmd_clear; cmd_cost; cmd_exit;
+  cmd_help; cmd_clear; cmd_cls; cmd_cost; cmd_exit;
   cmd_model; cmd_config; cmd_compact; cmd_resume;
   cmd_doctor; cmd_login; cmd_vim;
 ]

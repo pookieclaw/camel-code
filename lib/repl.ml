@@ -71,6 +71,8 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
     | None -> go := false
     | Some input ->
       first_prompt := false;
+      (* Ctrl-L comes through as \012 in cooked mode *)
+      let input = if String.length input = 1 && Char.code input.[0] = 12 then "/cls" else input in
       (match Commands.dispatch input ~messages:!msgs ~cost_tracker:ct with
        | Some Commands.Exit -> go := false
        | Some Commands.ClearMessages ->
