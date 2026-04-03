@@ -14,6 +14,7 @@ let default_flags = [
   { name = "bridge"; enabled = false; description = "Remote session bridge" };
   { name = "voice"; enabled = false; description = "Voice input mode" };
   { name = "analytics"; enabled = false; description = "Usage analytics" };
+  { name = "fff"; enabled = false; description = "Use fff engine for file search and grep" };
 ]
 
 let flags = ref default_flags
