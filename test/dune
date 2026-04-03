@@ -1,6 +1,6 @@
 (test
  (name test_camel)
- (libraries camel_lib alcotest))
+ (libraries camel_lib alcotest str))
 
 (executable
  (name bench_fff)
