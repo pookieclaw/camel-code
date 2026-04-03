@@ -19,38 +19,70 @@ let init ~base_path =
     _cleanup_registered := true
   end
 
+(** Resolve a path to a canonical absolute path using realpath. *)
+let realpath p =
+  try
+    let ic = Unix.open_process_in (Printf.sprintf "realpath -m %s 2>/dev/null" (Filename.quote p)) in
+    let result = try Some (String.trim (input_line ic)) with End_of_file -> None in
+    ignore (Unix.close_process_in ic);
+    result
+  with _ -> None
+
+(** Check if a string contains spaces or fff query-parser metacharacters. *)
+let has_unsafe_chars s =
+  let rec check i =
+    if i >= String.length s then false
+    else match s.[i] with
+      | ' ' | '!' | '|' | '{' | '}' -> true
+      | _ -> check (i + 1)
+  in
+  check 0
+
 (** Build an fff constraint prefix from optional path and glob.
     Returns a string to prepend to the query (for search/grep)
     or pass as constraints param (for multi_grep).
-    Returns None if the path is outside the indexed root. *)
+    Returns None if the path is outside the indexed root or
+    contains characters that could corrupt the fff query parser. *)
 let build_constraint ~cwd ?path ?glob () =
   let parts = ref [] in
-  (* Path constraint: make relative to cwd *)
+  let outside = ref false in
+  (* Path constraint *)
   (match path with
    | Some p when p <> cwd ->
-     (* Check if path is under cwd *)
-     let cwd_slash = if String.length cwd > 0 && cwd.[String.length cwd - 1] = '/' then cwd
-       else cwd ^ "/" in
-     if String.length p >= String.length cwd_slash
-        && String.sub p 0 (String.length cwd_slash) = cwd_slash then
-       (* Absolute path under cwd — make relative *)
-       let rel = String.sub p (String.length cwd_slash)
-           (String.length p - String.length cwd_slash) in
-       parts := (rel ^ "/") :: !parts
-     else if not (Filename.is_relative p) then
-       (* Absolute path outside cwd — can't use fff *)
-       parts := ["__OUTSIDE__"]
-     else
-       (* Already relative *)
-       parts := (p ^ "/") :: !parts
+     (* Bail on paths with spaces or parser metacharacters *)
+     if has_unsafe_chars p then
+       outside := true
+     else begin
+       (* Resolve both paths to canonical form to handle ../, symlinks *)
+       let resolved_cwd = match realpath cwd with Some r -> r | None -> cwd in
+       let resolved_p = match realpath p with Some r -> r | None -> p in
+       let cwd_prefix = resolved_cwd ^ "/" in
+       if resolved_p = resolved_cwd then
+         () (* Same as cwd, no constraint needed *)
+       else if String.length resolved_p > String.length cwd_prefix
+               && String.sub resolved_p 0 (String.length cwd_prefix) = cwd_prefix then begin
+         (* Inside cwd — make relative *)
+         let rel = String.sub resolved_p (String.length cwd_prefix)
+             (String.length resolved_p - String.length cwd_prefix) in
+         (* Check if it's a directory or file *)
+         if Sys.file_exists resolved_p && Sys.is_directory resolved_p then
+           parts := (rel ^ "/") :: !parts
+         else
+           parts := rel :: !parts
+       end else
+         (* Outside cwd — can't use fff *)
+         outside := true
+     end
    | _ -> ());
-  (* Glob constraint *)
+  (* Glob constraint — bail on unsafe chars *)
   (match glob with
-   | Some g -> parts := g :: !parts
+   | Some g when not (has_unsafe_chars g) -> parts := g :: !parts
+   | Some _ -> outside := true
    | None -> ());
-  let parts = !parts in
-  if List.mem "__OUTSIDE__" parts then None
-  else Some (String.concat " " parts)
+  if !outside then None
+  else
+    let parts = !parts in
+    Some (String.concat " " parts)
 
 let search ~query ?path ?glob ~cwd ?(max_results = 200) () =
   if not (is_initialized ()) then Error "fff not initialized"
