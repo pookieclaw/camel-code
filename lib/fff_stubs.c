@@ -222,7 +222,8 @@ resolve:
     sym_free_search = (fn_free_search_t)dlsym(lib_handle, "fff_free_search_result");
     sym_free_grep   = (fn_free_grep_t)  dlsym(lib_handle, "fff_free_grep_result");
 
-    if (!sym_create || !sym_destroy || !sym_search || !sym_grep || !sym_free_result) {
+    if (!sym_create || !sym_destroy || !sym_search || !sym_grep ||
+        !sym_free_result || !sym_free_search || !sym_free_grep) {
         dlclose(lib_handle);
         lib_handle = NULL;
         return 0;
@@ -251,6 +252,12 @@ CAMLprim value caml_fff_init(value v_base_path) {
     if (!load_library())
         caml_failwith("fff: native library not found");
 
+    /* Guard against double init — destroy existing instance first */
+    if (fff_instance && sym_destroy) {
+        sym_destroy(fff_instance);
+        fff_instance = NULL;
+    }
+
     char *base = strdup(String_val(v_base_path));
     const char *home = getenv("HOME");
     char frecency[512], history[512];
@@ -273,15 +280,23 @@ CAMLprim value caml_fff_init(value v_base_path) {
     fff_instance = r->handle;
     sym_free_result(r);
 
-    /* Trigger background scan */
+    /* Trigger background scan and check result */
     if (sym_scan) {
         FffResult *sr = sym_scan(fff_instance);
+        if (sr && !sr->success) {
+            fprintf(stderr, "fff: scan failed: %s\n",
+                    sr->error ? sr->error : "unknown");
+        }
         if (sr) sym_free_result(sr);
     }
 
-    /* Wait up to 5s for initial scan */
+    /* Wait up to 5s for initial scan and check result */
     if (sym_wait_scan) {
         FffResult *wr = sym_wait_scan(fff_instance, 5000);
+        if (wr && !wr->success) {
+            fprintf(stderr, "fff: scan wait failed: %s\n",
+                    wr->error ? wr->error : "timeout");
+        }
         if (wr) sym_free_result(wr);
     }
 
@@ -377,10 +392,10 @@ CAMLprim value caml_fff_grep(value v_query, value v_max, value v_before, value v
     uint32_t before_ctx   = (uint32_t)Int_val(v_before);
     uint32_t after_ctx    = (uint32_t)Int_val(v_after);
 
-    /* mode 0 = plain text, smart_case = true, time_budget = 500ms */
+    /* mode 1 = regex, smart_case = true, time_budget = 500ms */
     FffResult *r = sym_grep(
         fff_instance, query,
-        0,             /* mode: plain text */
+        1,             /* mode: regex (matches shell grep -rn semantics) */
         (uint64_t)10 * 1024 * 1024,  /* max_file_size: 10MB */
         max_matches,   /* max_matches_per_file */
         true,          /* smart_case */

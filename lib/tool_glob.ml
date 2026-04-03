@@ -37,7 +37,9 @@ let execute_shell ~pattern ~dir =
 let execute ~input ~cwd =
   let pattern = get_string_exn "pattern" input in
   let dir = Option.value (get_string "path" input) ~default:cwd in
-  if Feature_flags.is_enabled "fff" && Fff.is_initialized () then
+  let has_custom_path = dir <> cwd in
+  if Feature_flags.is_enabled "fff" && Fff.is_initialized ()
+     && not has_custom_path then
     match Fff.search ~query:pattern () with
     | Ok output ->
       if String.length (String.trim output) = 0 then

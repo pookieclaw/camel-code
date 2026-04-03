@@ -53,7 +53,8 @@ let execute ~input ~cwd =
   let dir = Option.value (get_string "path" input) ~default:cwd in
   if patterns = [] then
     { output = "No patterns provided"; is_error = true }
-  else if Feature_flags.is_enabled "fff" && Fff.is_initialized () then
+  else if Feature_flags.is_enabled "fff" && Fff.is_initialized ()
+          && dir = cwd then
     match Fff.multi_grep ~patterns () with
     | Ok output ->
       if String.length (String.trim output) = 0 then

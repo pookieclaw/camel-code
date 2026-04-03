@@ -42,7 +42,10 @@ let execute ~input ~cwd =
     | Some g -> Printf.sprintf "--include=%s" (Filename.quote g)
     | None -> ""
   in
-  if Feature_flags.is_enabled "fff" && Fff.is_initialized () then
+  let has_custom_path = dir <> cwd in
+  let has_glob = get_string "glob" input <> None in
+  if Feature_flags.is_enabled "fff" && Fff.is_initialized ()
+     && not has_custom_path && not has_glob then
     match Fff.grep ~query:pattern () with
     | Ok output ->
       if String.length (String.trim output) = 0 then

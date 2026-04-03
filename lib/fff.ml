@@ -10,9 +10,14 @@ external raw_search : string -> int -> string = "caml_fff_search"
 external raw_grep : string -> int -> int -> int -> string = "caml_fff_grep"
 external raw_multi_grep : string -> int -> int -> int -> string = "caml_fff_multi_grep"
 
+let _cleanup_registered = ref false
+
 let init ~base_path =
   raw_init base_path;
-  at_exit (fun () -> if is_initialized () then raw_destroy ())
+  if not !_cleanup_registered then begin
+    at_exit (fun () -> if is_initialized () then raw_destroy ());
+    _cleanup_registered := true
+  end
 
 let search ~query ?(max_results = 200) () =
   if not (is_initialized ()) then Error "fff not initialized"
