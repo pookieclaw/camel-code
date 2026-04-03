@@ -28,7 +28,6 @@ let get_string_list key json =
   | _ -> []
 
 let execute_fallback ~patterns ~dir =
-  (* Fallback: run sequential greps and combine *)
   let buf = Buffer.create 2048 in
   List.iter (fun pattern ->
     let cmd = Printf.sprintf
@@ -53,9 +52,8 @@ let execute ~input ~cwd =
   let dir = Option.value (get_string "path" input) ~default:cwd in
   if patterns = [] then
     { output = "No patterns provided"; is_error = true }
-  else if Feature_flags.is_enabled "fff" && Fff.is_initialized ()
-          && dir = cwd then
-    match Fff.multi_grep ~patterns () with
+  else if Feature_flags.is_enabled "fff" && Fff.is_initialized () then
+    match Fff.multi_grep ~patterns ~path:dir ~cwd () with
     | Ok output ->
       if String.length (String.trim output) = 0 then
         { output = "No matches found"; is_error = false }

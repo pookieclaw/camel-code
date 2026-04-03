@@ -475,8 +475,8 @@ CAMLprim value caml_fff_grep(value v_query, value v_max, value v_before, value v
  * OCaml stubs — multi-grep (M5)
  * ================================================================ */
 
-CAMLprim value caml_fff_multi_grep(value v_patterns, value v_max, value v_before, value v_after) {
-    CAMLparam4(v_patterns, v_max, v_before, v_after);
+CAMLprim value caml_fff_multi_grep(value v_patterns, value v_constraints, value v_max, value v_before, value v_after) {
+    CAMLparam5(v_patterns, v_constraints, v_max, v_before, v_after);
     CAMLlocal1(v_result);
 
     if (!fff_instance)
@@ -485,13 +485,14 @@ CAMLprim value caml_fff_multi_grep(value v_patterns, value v_max, value v_before
         caml_failwith("fff: multi_grep not available");
 
     char *patterns = strdup(String_val(v_patterns));
+    char *constraints = strdup(String_val(v_constraints));
     uint32_t max_matches = (uint32_t)Int_val(v_max);
     uint32_t before_ctx  = (uint32_t)Int_val(v_before);
     uint32_t after_ctx   = (uint32_t)Int_val(v_after);
 
     FffResult *r = sym_mgrep(
         fff_instance, patterns,
-        "",            /* constraints */
+        constraints,
         (uint64_t)10 * 1024 * 1024,
         max_matches,
         true,          /* smart_case */
@@ -503,6 +504,7 @@ CAMLprim value caml_fff_multi_grep(value v_patterns, value v_max, value v_before
         true           /* classify_definitions */
     );
     free(patterns);
+    free(constraints);
 
     if (!r) caml_failwith("fff: multi_grep returned null");
     if (!r->success) {

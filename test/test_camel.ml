@@ -212,17 +212,17 @@ let test_fff_not_initialized () =
   Alcotest.(check bool) "not initialized" false (Fff.is_initialized ())
 
 let test_fff_search_without_init () =
-  match Fff.search ~query:"test" () with
+  match Fff.search ~query:"test" ~cwd:"." () with
   | Error msg -> Alcotest.(check bool) "has error" true (String.length msg > 0)
   | Ok _ -> Alcotest.fail "should fail when not initialized"
 
 let test_fff_grep_without_init () =
-  match Fff.grep ~query:"test" () with
+  match Fff.grep ~query:"test" ~cwd:"." () with
   | Error msg -> Alcotest.(check bool) "has error" true (String.length msg > 0)
   | Ok _ -> Alcotest.fail "should fail when not initialized"
 
 let test_fff_multi_grep_without_init () =
-  match Fff.multi_grep ~patterns:["a"; "b"] () with
+  match Fff.multi_grep ~patterns:["a"; "b"] ~cwd:"." () with
   | Error msg -> Alcotest.(check bool) "has error" true (String.length msg > 0)
   | Ok _ -> Alcotest.fail "should fail when not initialized"
 
@@ -269,14 +269,14 @@ let test_fff_init () =
 
 let test_fff_search_returns_results () =
   ensure_fff_init ();
-  match Fff.search ~query:"*.ml" () with
+  match Fff.search ~query:"*.ml" ~cwd:!fff_test_dir () with
   | Ok s ->
     Alcotest.(check bool) "non-empty" true (String.length (String.trim s) > 0)
   | Error e -> Alcotest.fail (Printf.sprintf "search failed: %s" e)
 
 let test_fff_search_no_results () =
   ensure_fff_init ();
-  match Fff.search ~query:"nonexistent_zzzqqq.xyz" () with
+  match Fff.search ~query:"nonexistent_zzzqqq.xyz" ~cwd:!fff_test_dir () with
   | Ok s ->
     Alcotest.(check bool) "empty or no files" true
       (String.length (String.trim s) = 0 || String.trim s = "")
@@ -284,7 +284,7 @@ let test_fff_search_no_results () =
 
 let test_fff_grep_basic () =
   ensure_fff_init ();
-  match Fff.grep ~query:"greet" () with
+  match Fff.grep ~query:"greet" ~cwd:!fff_test_dir () with
   | Ok s ->
     Alcotest.(check bool) "contains match" true (String.length s > 0);
     Alcotest.(check bool) "mentions hello.ml" true
@@ -294,7 +294,7 @@ let test_fff_grep_basic () =
 
 let test_fff_grep_regex () =
   ensure_fff_init ();
-  match Fff.grep ~query:"foo.*bar" () with
+  match Fff.grep ~query:"foo.*bar" ~cwd:!fff_test_dir () with
   | Ok s ->
     let lines = String.split_on_char '\n' s
       |> List.filter (fun l -> String.length (String.trim l) > 0) in
@@ -304,14 +304,14 @@ let test_fff_grep_regex () =
 
 let test_fff_grep_no_results () =
   ensure_fff_init ();
-  match Fff.grep ~query:"zzz_no_match_qqq" () with
+  match Fff.grep ~query:"zzz_no_match_qqq" ~cwd:!fff_test_dir () with
   | Ok s ->
     Alcotest.(check bool) "empty" true (String.length (String.trim s) = 0)
   | Error _ -> () (* error also acceptable *)
 
 let test_fff_multi_grep () =
   ensure_fff_init ();
-  match Fff.multi_grep ~patterns:["greet"; "add"] () with
+  match Fff.multi_grep ~patterns:["greet"; "add"] ~cwd:!fff_test_dir () with
   | Ok s ->
     Alcotest.(check bool) "non-empty" true (String.length (String.trim s) > 0)
   | Error e -> Alcotest.fail (Printf.sprintf "multi_grep failed: %s" e)
@@ -323,13 +323,13 @@ let test_fff_double_init () =
   Alcotest.(check bool) "first init" true (Fff.is_initialized ());
   Fff.init ~base_path:dir;
   Alcotest.(check bool) "second init" true (Fff.is_initialized ());
-  match Fff.search ~query:"*" () with
+  match Fff.search ~query:"*" ~cwd:dir () with
   | Ok _ -> ()
   | Error e -> Alcotest.fail (Printf.sprintf "search after reinit failed: %s" e)
 
-let test_fff_glob_path_fallback () =
+let test_fff_glob_outside_path_fallback () =
   ensure_fff_init ();
-  (* When path differs from cwd, Glob should fall back to shell *)
+  (* Path OUTSIDE indexed root should fall back to shell *)
   let dir = Filename.temp_dir "camel_fff_scope" "" in
   let path = Filename.concat dir "scoped.txt" in
   let oc = open_out path in output_string oc "test"; close_out oc;
@@ -338,22 +338,22 @@ let test_fff_glob_path_fallback () =
     ("path", `String dir);
   ] in
   let result = Tool_glob.execute ~input ~cwd:!fff_test_dir in
-  Alcotest.(check bool) "found via fallback" true
+  Alcotest.(check bool) "found via shell fallback" true
     (not result.is_error && String.length (String.trim result.output) > 0);
   Alcotest.(check bool) "contains scoped.txt" true
     (try let _ = Str.search_forward (Str.regexp_string "scoped.txt") result.output 0 in true
      with Not_found -> false);
   Sys.remove path; Unix.rmdir dir
 
-let test_fff_grep_glob_fallback () =
+let test_fff_grep_with_glob_constraint () =
   ensure_fff_init ();
-  (* When glob filter is specified, Grep should fall back to shell *)
+  (* Glob filter should be forwarded as fff constraint, not trigger fallback *)
   let input = `Assoc [
     ("pattern", `String "greet");
     ("glob", `String "*.ml");
   ] in
   let result = Tool_grep.execute ~input ~cwd:!fff_test_dir in
-  Alcotest.(check bool) "found via fallback" true
+  Alcotest.(check bool) "found results" true
     (not result.is_error && String.length (String.trim result.output) > 0)
 
 let () =
@@ -429,7 +429,7 @@ let () =
       Alcotest.test_case "grep_empty" `Quick test_fff_grep_no_results;
       Alcotest.test_case "multi_grep" `Quick test_fff_multi_grep;
       Alcotest.test_case "double_init" `Quick test_fff_double_init;
-      Alcotest.test_case "glob_path_fallback" `Quick test_fff_glob_path_fallback;
-      Alcotest.test_case "grep_glob_fallback" `Quick test_fff_grep_glob_fallback;
+      Alcotest.test_case "glob_outside_fallback" `Quick test_fff_glob_outside_path_fallback;
+      Alcotest.test_case "grep_glob_constraint" `Quick test_fff_grep_with_glob_constraint;
     ];
   ]

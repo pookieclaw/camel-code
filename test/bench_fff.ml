@@ -37,14 +37,14 @@ let () =
 
   if Fff.is_initialized () then begin
     let _fff_result = time_it "fff search *.ml" (fun () ->
-      match Fff.search ~query:"*.ml" () with
+      match Fff.search ~query:"*.ml" ~cwd:(Sys.getcwd ()) () with
       | Ok s -> s
       | Error e -> Printf.sprintf "Error: %s" e
     ) in
 
     (* Second run (warm) *)
     let _fff_warm = time_it "fff search *.ml (warm)" (fun () ->
-      match Fff.search ~query:"*.ml" () with
+      match Fff.search ~query:"*.ml" ~cwd:(Sys.getcwd ()) () with
       | Ok s -> s
       | Error e -> Printf.sprintf "Error: %s" e
     ) in
@@ -65,13 +65,13 @@ let () =
 
   if Fff.is_initialized () then begin
     let _fff_grep = time_it "fff grep execute" (fun () ->
-      match Fff.grep ~query:"execute" () with
+      match Fff.grep ~query:"execute" ~cwd:(Sys.getcwd ()) () with
       | Ok s -> s
       | Error e -> Printf.sprintf "Error: %s" e
     ) in
 
     let _fff_grep_warm = time_it "fff grep execute (warm)" (fun () ->
-      match Fff.grep ~query:"execute" () with
+      match Fff.grep ~query:"execute" ~cwd:(Sys.getcwd ()) () with
       | Ok s -> s
       | Error e -> Printf.sprintf "Error: %s" e
     ) in
@@ -79,7 +79,7 @@ let () =
     (* Multi-grep *)
     Printf.printf "\n--- Multi-pattern Search ---\n";
     let _fff_mgrep = time_it "fff multi_grep [execute;permission]" (fun () ->
-      match Fff.multi_grep ~patterns:["execute"; "permission"] () with
+      match Fff.multi_grep ~patterns:["execute"; "permission"] ~cwd:(Sys.getcwd ()) () with
       | Ok s -> s
       | Error e -> Printf.sprintf "Error: %s" e
     ) in
