@@ -17,14 +17,7 @@ let input_schema = `Assoc [
   ("required", `List [`String "pattern"]);
 ]
 
-let execute ~input ~cwd =
-  let pattern = get_string_exn "pattern" input in
-  let dir = Option.value (get_string "path" input) ~default:cwd in
-  let glob_filter = match get_string "glob" input with
-    | Some g -> Printf.sprintf "--include=%s" (Filename.quote g)
-    | None -> ""
-  in
-  (* Use grep or rg if available *)
+let execute_shell ~pattern ~dir ~glob_filter =
   let cmd = Printf.sprintf
     "grep -rn %s %s %s 2>/dev/null | head -100"
     glob_filter (Filename.quote pattern) (Filename.quote dir)
@@ -41,6 +34,24 @@ let execute ~input ~cwd =
     { output = "No matches found"; is_error = false }
   else
     { output; is_error = false }
+
+let execute ~input ~cwd =
+  let pattern = get_string_exn "pattern" input in
+  let dir = Option.value (get_string "path" input) ~default:cwd in
+  let glob_filter = match get_string "glob" input with
+    | Some g -> Printf.sprintf "--include=%s" (Filename.quote g)
+    | None -> ""
+  in
+  if Feature_flags.is_enabled "fff" && Fff.is_initialized () then
+    match Fff.grep ~query:pattern () with
+    | Ok output ->
+      if String.length (String.trim output) = 0 then
+        { output = "No matches found"; is_error = false }
+      else
+        { output; is_error = false }
+    | Error _ -> execute_shell ~pattern ~dir ~glob_filter
+  else
+    execute_shell ~pattern ~dir ~glob_filter
 
 let check_permission ~input:_ ~auto_approve:_ = Allow
 
