@@ -104,7 +104,7 @@ Glob, Grep, and MultiGrep can be accelerated by [fff](https://github.com/dmtrKov
 export CAMEL_FFF=1
 ```
 
-The devcontainer builds `libfff_c.so` automatically. When the library isn't found, tools fall back to shell (`find`/`grep`). Benchmarks show **~100-200x speedup** on indexed repos.
+The devcontainer builds `libfff_c.so` automatically. When the library isn't found, tools fall back to shell (`find`/`grep`). Path and glob constraints (e.g. `Grep pattern path:lib/` or `Grep pattern glob:*.ml`) are forwarded to fff as inline query constraints, so scoped searches stay fast. Only paths outside the project root fall back to shell. Benchmarks show **~100-200x speedup** on indexed repos.
 
 ## Configuration
 
