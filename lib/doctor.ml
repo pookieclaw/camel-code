@@ -41,6 +41,17 @@ let check_skills () =
   else
     Ok (Printf.sprintf "%d skill(s): %s" (List.length skills) (String.concat ", " skills))
 
+let check_fff () =
+  if not (Feature_flags.is_enabled "fff") then
+    Ok "fff disabled (set CAMEL_FFF=1 to enable)"
+  else if Fff.is_available () then
+    if Fff.is_initialized () then
+      Ok "fff engine initialized"
+    else
+      Warn "fff available but not initialized"
+  else
+    Warn "fff flag enabled but native library not linked"
+
 let check_api_connectivity () =
   let cmd = "curl -s -o /dev/null -w '%{http_code}' -H 'x-api-key: test' https://api.anthropic.com/v1/messages 2>/dev/null" in
   let ic = Unix.open_process_in cmd in
@@ -61,6 +72,7 @@ let run_all () =
     ("API Connectivity", check_api_connectivity ());
     ("MCP Servers", check_mcp_servers ());
     ("Skills", check_skills ());
+    ("fff Engine", check_fff ());
   ] in
   let green s = Printf.sprintf "\027[32m%s\027[0m" s in
   let yellow s = Printf.sprintf "\027[33m%s\027[0m" s in

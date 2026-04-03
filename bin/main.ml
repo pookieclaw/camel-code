@@ -39,6 +39,13 @@ let () =
   (* Initialize feature flags *)
   Feature_flags.init ();
 
+  (* Initialize fff search engine if enabled *)
+  if Feature_flags.is_enabled "fff" then begin
+    try Fff.init ~base_path:(Sys.getcwd ())
+    with Failure msg ->
+      Printf.eprintf "\027[33mWarning:\027[0m fff init failed: %s\n" msg
+  end;
+
   (* Try to create config — give a friendly error if no API key *)
   let config =
     try Config.create

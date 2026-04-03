@@ -1,3 +1,4 @@
 (library
  (name camel_lib)
- (libraries unix yojson uri))
+ (libraries unix yojson uri)
+ (foreign_stubs (language c) (names fff_stubs)))

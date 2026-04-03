@@ -10,6 +10,7 @@ let all_tools : packed list = [
   (module Tool_edit : S);
   (module Tool_glob : S);
   (module Tool_grep : S);
+  (module Tool_multi_grep : S);
   (module Tool_agent : S);
   (module Tool_web_fetch : S);
   (module Tool_ask_user : S);

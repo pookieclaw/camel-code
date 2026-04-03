@@ -16,10 +16,7 @@ let input_schema = `Assoc [
   ("required", `List [`String "pattern"]);
 ]
 
-let execute ~input ~cwd =
-  let pattern = get_string_exn "pattern" input in
-  let dir = Option.value (get_string "path" input) ~default:cwd in
-  (* Use find + grep to simulate glob matching *)
+let execute_shell ~pattern ~dir =
   let cmd = Printf.sprintf
     "find %s -type f -name %s 2>/dev/null | head -200 | sort"
     (Filename.quote dir) (Filename.quote pattern)
@@ -36,6 +33,22 @@ let execute ~input ~cwd =
     { output = "No files found"; is_error = false }
   else
     { output; is_error = false }
+
+let execute ~input ~cwd =
+  let pattern = get_string_exn "pattern" input in
+  let dir = Option.value (get_string "path" input) ~default:cwd in
+  let has_custom_path = dir <> cwd in
+  if Feature_flags.is_enabled "fff" && Fff.is_initialized ()
+     && not has_custom_path then
+    match Fff.search ~query:pattern () with
+    | Ok output ->
+      if String.length (String.trim output) = 0 then
+        { output = "No files found"; is_error = false }
+      else
+        { output; is_error = false }
+    | Error _ -> execute_shell ~pattern ~dir
+  else
+    execute_shell ~pattern ~dir
 
 let check_permission ~input:_ ~auto_approve:_ = Allow
 
