@@ -75,7 +75,7 @@ Inside the REPL:
 
 ## Tools
 
-Camel Code has 13 built-in tools, matching Claude Code's core set:
+Camel Code has 14 built-in tools, matching Claude Code's core set:
 
 | Tool | Description |
 |------|-------------|
@@ -83,8 +83,9 @@ Camel Code has 13 built-in tools, matching Claude Code's core set:
 | **Read** | Read file contents with line numbers |
 | **Write** | Write/create files |
 | **Edit** | Search and replace in files |
-| **Glob** | Find files by pattern |
-| **Grep** | Search file contents with regex |
+| **Glob** | Find files by pattern (fff-accelerated) |
+| **Grep** | Search file contents with regex (fff-accelerated) |
+| **MultiGrep** | Multi-pattern OR search (fff-accelerated) |
 | **Agent** | Spawn subagents for complex tasks |
 | **WebFetch** | Fetch URL content |
 | **AskUserQuestion** | Prompt user for input |
@@ -94,6 +95,16 @@ Camel Code has 13 built-in tools, matching Claude Code's core set:
 | **TaskUpdate** | Update task status |
 
 Plus dynamic tools from MCP servers configured in `~/.camel/settings.json`.
+
+### fff Search Engine
+
+Glob, Grep, and MultiGrep can be accelerated by [fff](https://github.com/dmtrKovalenko/fff.nvim) (Freakin Fast File Finder), a Rust-based fuzzy search engine with frecency ranking, typo-tolerant matching, and definition-aware grep. Enable with:
+
+```bash
+export CAMEL_FFF=1
+```
+
+The devcontainer builds `libfff_c.so` automatically. When the library isn't found, tools fall back to shell (`find`/`grep`). Benchmarks show **~100-200x speedup** on indexed repos.
 
 ## Configuration
 
