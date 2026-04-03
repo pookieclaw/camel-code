@@ -1,8 +1,0 @@
-; Disabled until libfff is available in devcontainer (M2).
-; Flip enabled_if to build and link against fff-c.
-(library
- (name fff_native)
- (enabled_if false)
- (foreign_stubs (language c) (names fff_stubs))
- (c_library_flags (-lfff))
- (libraries unix))

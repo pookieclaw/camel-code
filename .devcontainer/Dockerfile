@@ -11,7 +11,20 @@ RUN sudo apt-get update && sudo apt-get install -y \
     libgmp-dev \
     libffi-dev \
     m4 \
+    cmake \
     && sudo rm -rf /var/lib/apt/lists/*
+
+# Install Rust for fff-c
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/home/opam/.cargo/bin:${PATH}"
+
+# Build fff-c shared library
+RUN git clone --depth 1 https://github.com/dmtrKovalenko/fff.nvim.git /tmp/fff \
+    && cd /tmp/fff \
+    && cargo build --release -p fff-c 2>&1 \
+    && sudo cp target/release/libfff_c.so /usr/local/lib/ \
+    && sudo ldconfig \
+    && rm -rf /tmp/fff /home/opam/.cargo/registry /home/opam/.cargo/git
 
 # Pre-install core opam packages for faster builds
 RUN opam install -y \

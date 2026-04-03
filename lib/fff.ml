@@ -1,77 +1,31 @@
-(** Public API for the fff search engine.
-    Starts as a stub. Once fff_native is linked (M2+), this module
-    delegates to the real native bindings via Fff_native. *)
+(** fff — OCaml interface to the fff search engine.
+    Uses dlopen at runtime to load libfff_c. If the library is not found,
+    [is_available] returns false and all operations return Error. *)
 
-(* --- Types (shared with fff_bindings, duplicated here for stub mode) --- *)
+external is_available : unit -> bool = "caml_fff_is_available"
+external is_initialized : unit -> bool = "caml_fff_is_initialized"
+external raw_init : string -> unit = "caml_fff_init"
+external raw_destroy : unit -> unit = "caml_fff_destroy"
+external raw_search : string -> int -> string = "caml_fff_search"
+external raw_grep : string -> int -> int -> int -> string = "caml_fff_grep"
+external raw_multi_grep : string -> int -> int -> int -> string = "caml_fff_multi_grep"
 
-type file_item = {
-  path : string;
-  relative_path : string;
-  file_name : string;
-  size : int;
-  is_binary : bool;
-}
+let init ~base_path =
+  raw_init base_path;
+  at_exit (fun () -> if is_initialized () then raw_destroy ())
 
-type score = {
-  total : int;
-  base_score : int;
-  filename_bonus : int;
-  frecency_boost : int;
-  exact_match : bool;
-}
+let search ~query ?(max_results = 200) () =
+  if not (is_initialized ()) then Error "fff not initialized"
+  else try Ok (raw_search query max_results)
+  with Failure msg -> Error msg
 
-type search_result = {
-  items : (file_item * score) array;
-  total_matched : int;
-  total_files : int;
-}
+let grep ~query ?(max_matches = 100) ?(before_context = 0) ?(after_context = 0) () =
+  if not (is_initialized ()) then Error "fff not initialized"
+  else try Ok (raw_grep query max_matches before_context after_context)
+  with Failure msg -> Error msg
 
-type grep_match = {
-  path : string;
-  relative_path : string;
-  file_name : string;
-  line_content : string;
-  line_number : int;
-  col : int;
-  context_before : string array;
-  context_after : string array;
-  is_definition : bool;
-}
-
-type grep_result = {
-  matches : grep_match array;
-  total_matched : int;
-  total_files_searched : int;
-  next_file_offset : int;
-}
-
-(* --- Backend dispatch via refs (native backend registers itself at init) --- *)
-
-let _is_available = ref (fun () -> false)
-let _is_initialized = ref (fun () -> false)
-let _init = ref (fun ~base_path:(_ : string) -> ())
-let _search = ref (fun ~query:(_ : string) ?max_results:(_ : int option) () ->
-  (Error "fff native library not available" : (search_result, string) result))
-let _live_grep = ref (fun ~query:(_ : string)
-    ?max_matches_per_file:(_ : int option) ?smart_case:(_ : bool option)
-    ?page_limit:(_ : int option) ?time_budget_ms:(_ : int option)
-    ?before_context:(_ : int option) ?after_context:(_ : int option) () ->
-  (Error "fff native library not available" : (grep_result, string) result))
-let _multi_grep = ref (fun ~patterns:(_ : string list)
-    ?max_matches_per_file:(_ : int option) ?smart_case:(_ : bool option)
-    ?page_limit:(_ : int option) ?time_budget_ms:(_ : int option)
-    ?before_context:(_ : int option) ?after_context:(_ : int option) () ->
-  (Error "fff native library not available" : (grep_result, string) result))
-
-let is_available () = !_is_available ()
-let is_initialized () = !_is_initialized ()
-let init ~base_path = !_init ~base_path
-let search ~query ?max_results () = !_search ~query ?max_results ()
-let live_grep ~query ?max_matches_per_file ?smart_case ?page_limit
-    ?time_budget_ms ?before_context ?after_context () =
-  !_live_grep ~query ?max_matches_per_file ?smart_case ?page_limit
-    ?time_budget_ms ?before_context ?after_context ()
-let multi_grep ~patterns ?max_matches_per_file ?smart_case ?page_limit
-    ?time_budget_ms ?before_context ?after_context () =
-  !_multi_grep ~patterns ?max_matches_per_file ?smart_case ?page_limit
-    ?time_budget_ms ?before_context ?after_context ()
+let multi_grep ~patterns ?(max_matches = 100) ?(before_context = 0) ?(after_context = 0) () =
+  let joined = String.concat "\n" patterns in
+  if not (is_initialized ()) then Error "fff not initialized"
+  else try Ok (raw_multi_grep joined max_matches before_context after_context)
+  with Failure msg -> Error msg
