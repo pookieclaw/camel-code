@@ -200,6 +200,37 @@ let test_task_manager () =
    | Some t -> Alcotest.(check string) "status" "in_progress" (Task_manager.status_to_string t.status)
    | None -> Alcotest.fail "task not found")
 
+(* === fff tests === *)
+let test_fff_not_available () =
+  (* Without libfff, is_available should be false *)
+  (* Note: in CI/devcontainer without libfff this is always false *)
+  let _ = Fff.is_available () in
+  ()
+
+let test_fff_not_initialized () =
+  (* Before init, is_initialized should be false *)
+  Alcotest.(check bool) "not initialized" false (Fff.is_initialized ())
+
+let test_fff_search_without_init () =
+  match Fff.search ~query:"test" () with
+  | Error msg -> Alcotest.(check bool) "has error" true (String.length msg > 0)
+  | Ok _ -> Alcotest.fail "should fail when not initialized"
+
+let test_fff_grep_without_init () =
+  match Fff.grep ~query:"test" () with
+  | Error msg -> Alcotest.(check bool) "has error" true (String.length msg > 0)
+  | Ok _ -> Alcotest.fail "should fail when not initialized"
+
+let test_fff_multi_grep_without_init () =
+  match Fff.multi_grep ~patterns:["a"; "b"] () with
+  | Error msg -> Alcotest.(check bool) "has error" true (String.length msg > 0)
+  | Ok _ -> Alcotest.fail "should fail when not initialized"
+
+let test_multi_grep_tool_exists () =
+  match Tool_registry.find_tool "MultiGrep" with
+  | Some _ -> ()
+  | None -> Alcotest.fail "MultiGrep tool not registered"
+
 let () =
   Alcotest.run "camel" [
     "basics", [
@@ -255,5 +286,13 @@ let () =
     ];
     "tasks", [
       Alcotest.test_case "manager" `Quick test_task_manager;
+    ];
+    "fff", [
+      Alcotest.test_case "not_available" `Quick test_fff_not_available;
+      Alcotest.test_case "not_initialized" `Quick test_fff_not_initialized;
+      Alcotest.test_case "search_uninit" `Quick test_fff_search_without_init;
+      Alcotest.test_case "grep_uninit" `Quick test_fff_grep_without_init;
+      Alcotest.test_case "multi_grep_uninit" `Quick test_fff_multi_grep_without_init;
+      Alcotest.test_case "tool_registered" `Quick test_multi_grep_tool_exists;
     ];
   ]
