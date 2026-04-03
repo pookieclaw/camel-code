@@ -121,9 +121,9 @@ typedef FffResult*          (*fn_create_t)(const char*, const char*, const char*
 typedef void                (*fn_destroy_t)(void*);
 typedef FffResult*          (*fn_scan_t)(void*);
 typedef FffResult*          (*fn_wait_scan_t)(void*, uint64_t);
-typedef FffSearchResult*    (*fn_search_t)(void*, const char*, const char*, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
-typedef FffGrepResult*      (*fn_grep_t)(void*, const char*, uint8_t, uint64_t, uint32_t, bool, uint32_t, uint32_t, uint64_t, uint32_t, uint32_t, bool);
-typedef FffGrepResult*      (*fn_mgrep_t)(void*, const char*, const char*, uint64_t, uint32_t, bool, uint32_t, uint32_t, uint64_t, uint32_t, uint32_t, bool);
+typedef FffResult*          (*fn_search_t)(void*, const char*, const char*, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
+typedef FffResult*          (*fn_grep_t)(void*, const char*, uint8_t, uint64_t, uint32_t, bool, uint32_t, uint32_t, uint64_t, uint32_t, uint32_t, bool);
+typedef FffResult*          (*fn_mgrep_t)(void*, const char*, const char*, uint64_t, uint32_t, bool, uint32_t, uint32_t, uint64_t, uint32_t, uint32_t, bool);
 typedef void                (*fn_free_result_t)(FffResult*);
 typedef void                (*fn_free_search_t)(FffSearchResult*);
 typedef void                (*fn_free_grep_t)(FffGrepResult*);
@@ -312,7 +312,7 @@ CAMLprim value caml_fff_search(value v_query, value v_max) {
     uint32_t max_results = (uint32_t)Int_val(v_max);
 
     /* page_size = max_results, everything else default */
-    FffSearchResult *sr = sym_search(
+    FffResult *r = sym_search(
         fff_instance, query, NULL,
         0,             /* max_threads (0 = auto) */
         0,             /* page_index */
@@ -322,7 +322,20 @@ CAMLprim value caml_fff_search(value v_query, value v_max) {
     );
     free(query);
 
-    if (!sr) caml_failwith("fff: search returned null");
+    if (!r) caml_failwith("fff: search returned null");
+    if (!r->success) {
+        char errbuf[512];
+        snprintf(errbuf, sizeof(errbuf), "fff search failed: %s",
+                 r->error ? r->error : "unknown");
+        sym_free_result(r);
+        caml_failwith(errbuf);
+    }
+
+    FffSearchResult *sr = (FffSearchResult *)r->handle;
+    if (!sr) {
+        sym_free_result(r);
+        caml_failwith("fff: search result handle is null");
+    }
 
     Buf buf;
     buf_init(&buf, 4096);
@@ -343,6 +356,7 @@ CAMLprim value caml_fff_search(value v_query, value v_max) {
     v_result = caml_copy_string(buf.data);
     buf_free(&buf);
     if (sym_free_search) sym_free_search(sr);
+    sym_free_result(r);
 
     CAMLreturn(v_result);
 }
@@ -364,7 +378,7 @@ CAMLprim value caml_fff_grep(value v_query, value v_max, value v_before, value v
     uint32_t after_ctx    = (uint32_t)Int_val(v_after);
 
     /* mode 0 = plain text, smart_case = true, time_budget = 500ms */
-    FffGrepResult *gr = sym_grep(
+    FffResult *r = sym_grep(
         fff_instance, query,
         0,             /* mode: plain text */
         (uint64_t)10 * 1024 * 1024,  /* max_file_size: 10MB */
@@ -379,7 +393,19 @@ CAMLprim value caml_fff_grep(value v_query, value v_max, value v_before, value v
     );
     free(query);
 
-    if (!gr) caml_failwith("fff: grep returned null");
+    if (!r) caml_failwith("fff: grep returned null");
+    if (!r->success) {
+        char errbuf[512];
+        snprintf(errbuf, sizeof(errbuf), "fff grep failed: %s",
+                 r->error ? r->error : "unknown");
+        sym_free_result(r);
+        caml_failwith(errbuf);
+    }
+    FffGrepResult *gr = (FffGrepResult *)r->handle;
+    if (!gr) {
+        sym_free_result(r);
+        caml_failwith("fff: grep result handle is null");
+    }
 
     Buf buf;
     buf_init(&buf, 8192);
@@ -425,6 +451,7 @@ CAMLprim value caml_fff_grep(value v_query, value v_max, value v_before, value v
     v_result = caml_copy_string(buf.data);
     buf_free(&buf);
     if (sym_free_grep) sym_free_grep(gr);
+    sym_free_result(r);
 
     CAMLreturn(v_result);
 }
@@ -447,7 +474,7 @@ CAMLprim value caml_fff_multi_grep(value v_patterns, value v_max, value v_before
     uint32_t before_ctx  = (uint32_t)Int_val(v_before);
     uint32_t after_ctx   = (uint32_t)Int_val(v_after);
 
-    FffGrepResult *gr = sym_mgrep(
+    FffResult *r = sym_mgrep(
         fff_instance, patterns,
         "",            /* constraints */
         (uint64_t)10 * 1024 * 1024,
@@ -462,7 +489,19 @@ CAMLprim value caml_fff_multi_grep(value v_patterns, value v_max, value v_before
     );
     free(patterns);
 
-    if (!gr) caml_failwith("fff: multi_grep returned null");
+    if (!r) caml_failwith("fff: multi_grep returned null");
+    if (!r->success) {
+        char errbuf[512];
+        snprintf(errbuf, sizeof(errbuf), "fff multi_grep failed: %s",
+                 r->error ? r->error : "unknown");
+        sym_free_result(r);
+        caml_failwith(errbuf);
+    }
+    FffGrepResult *gr = (FffGrepResult *)r->handle;
+    if (!gr) {
+        sym_free_result(r);
+        caml_failwith("fff: multi_grep result handle is null");
+    }
 
     /* Same formatting as single grep */
     Buf buf;
@@ -506,6 +545,7 @@ CAMLprim value caml_fff_multi_grep(value v_patterns, value v_max, value v_before
     v_result = caml_copy_string(buf.data);
     buf_free(&buf);
     if (sym_free_grep) sym_free_grep(gr);
+    sym_free_result(r);
 
     CAMLreturn(v_result);
 }

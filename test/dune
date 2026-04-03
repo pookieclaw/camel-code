@@ -1,3 +1,11 @@
 (test
  (name test_camel)
  (libraries camel_lib alcotest))
+
+(executable
+ (name bench_fff)
+ (libraries camel_lib))
+
+(executable
+ (name debug_fff)
+ (libraries camel_lib))

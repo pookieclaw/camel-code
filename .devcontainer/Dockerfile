@@ -14,19 +14,7 @@ RUN sudo apt-get update && sudo apt-get install -y \
     cmake \
     && sudo rm -rf /var/lib/apt/lists/*
 
-# Install Rust for fff-c
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-ENV PATH="/home/opam/.cargo/bin:${PATH}"
-
-# Build fff-c shared library
-RUN git clone --depth 1 https://github.com/dmtrKovalenko/fff.nvim.git /tmp/fff \
-    && cd /tmp/fff \
-    && cargo build --release -p fff-c 2>&1 \
-    && sudo cp target/release/libfff_c.so /usr/local/lib/ \
-    && sudo ldconfig \
-    && rm -rf /tmp/fff /home/opam/.cargo/registry /home/opam/.cargo/git
-
-# Pre-install core opam packages for faster builds
+# Pre-install core opam packages for faster builds (cached layer)
 RUN opam install -y \
     dune \
     eio_main \
@@ -41,5 +29,16 @@ RUN opam install -y \
     ocaml-lsp-server \
     ocamlformat \
     && opam clean -a -c -s --logs
+
+# Install Rust + build fff-c (after opam so opam layer is cached)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/home/opam/.cargo/bin:${PATH}"
+
+RUN git clone --depth 1 https://github.com/dmtrKovalenko/fff.nvim.git /tmp/fff \
+    && cd /tmp/fff \
+    && cargo build --release -p fff-c 2>&1 \
+    && sudo cp target/release/libfff_c.so /usr/local/lib/ \
+    && sudo ldconfig \
+    && rm -rf /tmp/fff /home/opam/.cargo/registry /home/opam/.cargo/git
 
 WORKDIR /workspace
