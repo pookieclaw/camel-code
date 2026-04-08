@@ -68,17 +68,14 @@ echo ""
 step "Last saved session metadata:"
 LATEST=$(ls -t ~/.camel/sessions/*.json 2>/dev/null | head -1)
 if [ -n "$LATEST" ]; then
-    # Show metadata fields (not the full messages)
-    python3 -c "
-import json, sys
-with open('$LATEST') as f:
-    d = json.load(f)
-for k in ['id','model','cwd','started_at','git_repo','git_branch','label']:
-    v = d.get(k, '(not set)')
-    if k == 'id': v = v[:12] + '...'
-    print(f'  {k:16s} {v}')
-print(f'  {\"messages\":16s} {len(d.get(\"messages\",[]))} messages')
-" 2>&1
+    for field in id model cwd started_at git_repo git_branch label; do
+        val=$(grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$LATEST" | head -1 | sed 's/.*: *"//;s/"$//')
+        [ -z "$val" ] && val="(not set)"
+        [ "$field" = "id" ] && val="${val:0:12}..."
+        printf "    %-16s %s\n" "$field" "$val"
+    done
+    msg_count=$(grep -o '"role"' "$LATEST" | wc -l | tr -d ' ')
+    printf "    %-16s %s messages\n" "messages" "$msg_count"
     ok "Session saved with git repo and branch"
 else
     fail "No session file found"
@@ -98,29 +95,33 @@ if [ -S "$SOCK" ]; then
     echo ""
 
     step "Sending status command..."
-    RESP=$(echo '{"method":"status"}' | socat -t2 - UNIX-CONNECT:"$SOCK" 2>/dev/null || echo '{"error":"socat not available"}')
-    if command -v python3 &>/dev/null; then
-        echo "$RESP" | python3 -c "import json,sys; d=json.load(sys.stdin); [print(f'  {k}: {v}') for k,v in d.items()]" 2>/dev/null || echo "  $RESP"
+    if command -v socat &>/dev/null; then
+        RESP=$(echo '{"method":"status"}' | socat -t2 - UNIX-CONNECT:"$SOCK" 2>/dev/null || echo "")
+        echo "    $RESP"
     else
-        echo "  $RESP"
+        # No socat — use bash /dev/tcp equivalent via nc
+        RESP=$(echo '{"method":"status"}' | nc -U -w2 "$SOCK" 2>/dev/null || echo "")
+        echo "    $RESP"
     fi
     echo ""
 
     step "Sending a real query through the socket..."
-    RESP=$(echo '{"method":"query","params":{"prompt":"What is 2+2? Reply with just the number."}}' | socat -t30 - UNIX-CONNECT:"$SOCK" 2>/dev/null || echo '{"error":"socat not available"}')
-    if command -v python3 &>/dev/null; then
-        echo "$RESP" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-if 'response' in d:
-    print(f'  Response: {d[\"response\"][:200]}')
-    print(f'  Tokens: {d[\"usage\"][\"input_tokens\"]} in / {d[\"usage\"][\"output_tokens\"]} out')
-    print(f'  Cost: \${d[\"cost\"]:.4f}')
-elif 'error' in d:
-    print(f'  Error: {d[\"error\"]}')
-" 2>/dev/null || echo "  $RESP"
+    if command -v socat &>/dev/null; then
+        RESP=$(echo '{"method":"query","params":{"prompt":"What is 2+2? Reply with just the number."}}' | socat -t30 - UNIX-CONNECT:"$SOCK" 2>/dev/null || echo "")
     else
-        echo "  $RESP"
+        RESP=$(echo '{"method":"query","params":{"prompt":"What is 2+2? Reply with just the number."}}' | nc -U -w30 "$SOCK" 2>/dev/null || echo "")
+    fi
+    # Parse response with grep/sed
+    response=$(echo "$RESP" | grep -o '"response":"[^"]*"' | sed 's/"response":"//;s/"$//')
+    in_tok=$(echo "$RESP" | grep -o '"input_tokens":[0-9]*' | sed 's/.*://')
+    out_tok=$(echo "$RESP" | grep -o '"output_tokens":[0-9]*' | sed 's/.*://')
+    cost=$(echo "$RESP" | grep -o '"cost":[0-9.]*' | sed 's/.*://')
+    if [ -n "$response" ]; then
+        echo "    Response: $response"
+        echo "    Tokens: ${in_tok:-?} in / ${out_tok:-?} out"
+        echo "    Cost: \$${cost:-?}"
+    else
+        echo "    $RESP"
     fi
     echo ""
 
