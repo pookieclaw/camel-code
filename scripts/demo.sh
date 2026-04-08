@@ -103,18 +103,19 @@ pause
 
 # ── 5. Doctor --fix ───────────────────────────────────────────
 banner "5. Doctor --fix"
-step "Running doctor --fix on a clean temp HOME..."
-
-export REAL_HOME="$HOME"
-export HOME=$(mktemp -d)
-dune exec camel -- doctor --fix 2>&1 || true
+step "Running doctor --fix tests (creates real dirs, fixes perms, cleans orphans)..."
+dune exec -- test/test_camel.exe test doctor_fix 2>&1 | grep -E '(OK|FAIL|creates|fixes|cleans|idempotent)' || true
 echo ""
-step "Checking what was created:"
-find "$HOME/.camel" -type d 2>/dev/null | while read -r d; do
+step "Live demo on temp HOME:"
+DEMO_HOME=$(mktemp -d)
+HOME="$DEMO_HOME" dune exec camel -- doctor --fix 2>&1 || true
+echo ""
+step "Directories created:"
+find "$DEMO_HOME/.camel" -type d 2>/dev/null | while read -r d; do
     printf "  ${G}✓${X} %s\n" "$d"
 done
-export HOME="$REAL_HOME"
-ok "Creates dirs, fixes perms, cleans orphans"
+rm -rf "$DEMO_HOME"
+ok "Creates dirs, fixes perms, cleans orphans — idempotent"
 pause
 
 # ── 6. Session Enrichment ─────────────────────────────────────

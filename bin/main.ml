@@ -46,6 +46,12 @@ let () =
     Query.run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt
       ~tool_filter:["Read"; "Grep"; "Glob"] ());
 
+  (* Doctor commands don't need an API key — handle before config *)
+  (match args.prompt with
+   | Some "__doctor__" -> Doctor.run_all (); exit 0
+   | Some "__doctor_fix__" -> Doctor.run_fix (); exit 0
+   | _ -> ());
+
   (* Initialize fff search engine if enabled *)
   if Feature_flags.is_enabled "fff" then begin
     try Fff.init ~base_path:(Sys.getcwd ())
