@@ -43,8 +43,8 @@ let () =
 
   (* Wire up agent tool's query function ref to break dependency cycle *)
   Tool_agent.set_run_query (fun ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () ->
-    let tool_filter = Some ["Read"; "Grep"; "Glob"] in
-    Query.run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ~tool_filter ());
+    Query.run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt
+      ~tool_filter:["Read"; "Grep"; "Glob"] ());
 
   (* Initialize fff search engine if enabled *)
   if Feature_flags.is_enabled "fff" then begin

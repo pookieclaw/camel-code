@@ -160,7 +160,7 @@ let is_retryable_error msg =
     ["rate limit"; "overloaded"; "529"; "too many requests"; "capacity"]
 
 (** Main agentic query loop. *)
-let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filter () =
+let run ~(config : Config.t) ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filter () =
   let msgs = ref messages in
   let active_config = ref config in
 
@@ -170,8 +170,9 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filte
 
     (* Pre-query hooks *)
     let msg_count = List.length !msgs in
+    let cur = !active_config in
     let _pre_results = Hooks.run_hooks PreQuery
-      ~input:(`Assoc [("message_count", `Int msg_count); ("model", `String (!active_config).model)]) () in
+      ~input:(`Assoc [("message_count", `Int msg_count); ("model", `String cur.Config.model)]) () in
 
     (* Accumulate full response for markdown rendering *)
     let response_buf = Buffer.create 1024 in
@@ -213,11 +214,12 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filte
     Cost_tracker.add_turn cost_tracker usage;
 
     (* Post-query hooks *)
+    let cur_cfg = !active_config in
     let _post_results = Hooks.run_hooks PostQuery
       ~input:(`Assoc [
         ("input_tokens", `Int usage.input_tokens);
         ("output_tokens", `Int usage.output_tokens);
-        ("model", `String (!active_config).model);
+        ("model", `String cur_cfg.Config.model);
       ]) () in
 
     (* Per-turn cost *)
