@@ -36,7 +36,13 @@ let parse argv =
      | "--resume" -> r := { !r with resume = Some (next ()) }
      | "--continue" | "-c" -> r := { !r with continue_last = true }
      | "login" when !r.prompt = None -> r := { !r with prompt = Some "__login__" }
-     | "doctor" when !r.prompt = None -> r := { !r with prompt = Some "__doctor__" }
+     | "doctor" when !r.prompt = None ->
+       (* Peek ahead for --fix flag *)
+       if !i + 1 < len && argv.(!i + 1) = "--fix" then begin
+         incr i;
+         r := { !r with prompt = Some "__doctor_fix__" }
+       end else
+         r := { !r with prompt = Some "__doctor__" }
      | s when !r.prompt = None && s.[0] <> '-' -> r := { !r with prompt = Some s }
      | _ -> ());
     incr i

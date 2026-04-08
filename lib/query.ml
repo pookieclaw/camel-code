@@ -11,27 +11,37 @@ let red s = Printf.sprintf "\027[31m%s\027[0m" s
 let has_tool_use (msg : Message.message) =
   List.exists (fun b -> match b with Message.ToolUse _ -> true | _ -> false) msg.content
 
-(** Build the request body with tools included. *)
-let build_body ~(config : Config.t) ~messages ~system_prompt =
+(** Build the request body with tools included.
+    Field order is cache-stable: system and tools (stable prefix) come before
+    messages (which change every turn) to maximize Anthropic prompt cache hits. *)
+let build_body ~(config : Config.t) ~messages ~system_prompt ~tool_filter =
   let msgs = List.map Message.message_to_json_compact messages in
-  let tools = Tool_registry.tools_to_json () in
-  let parts = [
-    ("model", `String config.model);
-    ("max_tokens", `Int config.max_tokens);
-    ("stream", `Bool true);
-    ("messages", `List msgs);
-    ("tools", `List tools);
-  ] in
+  let tools = match tool_filter with
+    | None -> Tool_registry.tools_to_json_sorted ()
+    | Some names -> Tool_registry.tools_to_json_filtered names
+  in
+  let parts = [] in
+  (* Stable prefix: system prompt first — identical across turns *)
   let parts = match system_prompt with
     | Some s -> ("system", `String s) :: parts
     | None -> parts
   in
-  Yojson.Safe.to_string (`Assoc parts)
+  (* Stable config *)
+  let parts = List.rev_append [
+    ("model", `String config.model);
+    ("max_tokens", `Int config.max_tokens);
+    ("stream", `Bool true);
+  ] parts in
+  (* Tools: stable per session *)
+  let parts = ("tools", `List tools) :: parts in
+  (* Messages last: changes every turn, never part of cached prefix *)
+  let parts = ("messages", `List msgs) :: parts in
+  Yojson.Safe.to_string (`Assoc (List.rev parts))
 
 (** Stream a message from the API with tools.
     Shows a spinner while waiting for first token. *)
-let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on_text () =
-  let body = build_body ~config ~messages ~system_prompt in
+let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ?(tool_filter = None) ~on_text () =
+  let body = build_body ~config ~messages ~system_prompt ~tool_filter in
   let url = Printf.sprintf "%s/v1/messages" config.base_url in
   let acc = Streaming.create_accumulator () in
 
@@ -144,7 +154,7 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ~on
   Streaming.finalize acc
 
 (** Main agentic query loop. *)
-let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
+let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filter () =
   let msgs = ref messages in
 
   let rec loop () =
@@ -155,7 +165,7 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () =
     let response_buf = Buffer.create 1024 in
     let (response, _stop, usage) =
       try
-        stream_with_tools ~config ~messages:!msgs ~system_prompt
+        stream_with_tools ~config ~messages:!msgs ~system_prompt ~tool_filter
           ~on_text:(fun t -> Buffer.add_string response_buf t; print_string t; flush stdout) ()
       with Failure msg ->
         Printf.printf "\n%s %s\n" (red "Error:") msg;

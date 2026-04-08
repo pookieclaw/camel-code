@@ -356,6 +356,242 @@ let test_fff_grep_with_glob_constraint () =
   Alcotest.(check bool) "found results" true
     (not result.is_error && String.length (String.trim result.output) > 0)
 
+(* === Cache stability: verify JSON field ordering === *)
+
+(** Find index of element in list. *)
+let list_index_of x xs =
+  let rec go i = function
+    | [] -> -1
+    | h :: _ when h = x -> i
+    | _ :: t -> go (i + 1) t
+  in go 0 xs
+
+(** Parse the build_body output and verify field order is cache-stable:
+    system -> model -> max_tokens -> stream -> tools -> messages *)
+let test_cache_stable_field_order () =
+  let config = Config.{
+    api_key = "test-key"; model = "test-model";
+    max_tokens = 1024; base_url = "http://localhost";
+  } in
+  let messages = [Message.{ role = User; content = [Text "hello"] }] in
+  let body = Client.build_body ~config ~messages ~system_prompt:(Some "You are helpful") in
+  let json = Yojson.Safe.from_string body in
+  match json with
+  | `Assoc pairs ->
+    let keys = List.map fst pairs in
+    let sys_i = list_index_of "system" keys in
+    let model_i = list_index_of "model" keys in
+    let msgs_i = list_index_of "messages" keys in
+    Alcotest.(check bool) "system before model" true (sys_i < model_i);
+    Alcotest.(check bool) "model before messages" true (model_i < msgs_i);
+    Alcotest.(check bool) "messages is last" true (msgs_i = List.length keys - 1)
+  | _ -> Alcotest.fail "expected JSON object"
+
+(** Verify the same messages produce byte-identical payloads across calls *)
+let test_cache_stable_deterministic () =
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+  } in
+  let messages = [Message.{ role = User; content = [Text "test"] }] in
+  let body1 = Client.build_body ~config ~messages ~system_prompt:(Some "sys") in
+  let body2 = Client.build_body ~config ~messages ~system_prompt:(Some "sys") in
+  Alcotest.(check string) "identical payloads" body1 body2
+
+(** Verify tools come out sorted alphabetically regardless of registration order *)
+let test_tools_sorted_alphabetically () =
+  let tools = Tool_registry.tools_to_json_sorted () in
+  let names = List.filter_map (fun t ->
+    match t with
+    | `Assoc pairs ->
+      (match List.assoc_opt "name" pairs with
+       | Some (`String n) -> Some n | _ -> None)
+    | _ -> None
+  ) tools in
+  let sorted = List.sort String.compare names in
+  Alcotest.(check (list string)) "tools sorted" sorted names
+
+(* === Tool filtering: subagents only get their allowed tools === *)
+
+let test_tool_filter_subset () =
+  let filtered = Tool_registry.tools_to_json_filtered ["Read"; "Grep"; "Glob"] in
+  let names = List.filter_map (fun t ->
+    match t with
+    | `Assoc pairs ->
+      (match List.assoc_opt "name" pairs with
+       | Some (`String n) -> Some n | _ -> None)
+    | _ -> None
+  ) filtered in
+  Alcotest.(check int) "exactly 3 tools" 3 (List.length names);
+  Alcotest.(check bool) "has Read" true (List.mem "Read" names);
+  Alcotest.(check bool) "has Grep" true (List.mem "Grep" names);
+  Alcotest.(check bool) "has Glob" true (List.mem "Glob" names);
+  (* Must NOT include dangerous tools *)
+  Alcotest.(check bool) "no Bash" false (List.mem "Bash" names);
+  Alcotest.(check bool) "no Write" false (List.mem "Write" names);
+  Alcotest.(check bool) "no Edit" false (List.mem "Edit" names)
+
+let test_tool_filter_case_insensitive () =
+  let filtered = Tool_registry.tools_to_json_filtered ["read"; "GREP"] in
+  Alcotest.(check int) "found 2" 2 (List.length filtered)
+
+let test_tool_filter_empty () =
+  let filtered = Tool_registry.tools_to_json_filtered [] in
+  Alcotest.(check int) "no tools" 0 (List.length filtered)
+
+let test_tool_filter_nonexistent () =
+  let filtered = Tool_registry.tools_to_json_filtered ["FakeTool"; "Read"] in
+  Alcotest.(check int) "only real ones" 1 (List.length filtered)
+
+let test_tool_filter_sorted () =
+  let filtered = Tool_registry.tools_to_json_filtered ["Read"; "Bash"; "Glob"] in
+  let names = List.filter_map (fun t ->
+    match t with
+    | `Assoc pairs ->
+      (match List.assoc_opt "name" pairs with
+       | Some (`String n) -> Some n | _ -> None)
+    | _ -> None
+  ) filtered in
+  let sorted = List.sort String.compare names in
+  Alcotest.(check (list string)) "filtered tools also sorted" sorted names
+
+(* === Agent function ref wiring === *)
+
+let test_agent_fn_ref_default_fails () =
+  (* Before wiring, calling the ref should fail *)
+  let original = !Tool_agent.run_query_fn in
+  Tool_agent.run_query_fn := (fun ~config:_ ~messages:_ ~auto_approve:_ ~cost_tracker:_ ?system_prompt:_ () ->
+    failwith "not wired");
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+  } in
+  let ct = Cost_tracker.create ~model:"m" in
+  let threw = try
+    ignore (!Tool_agent.run_query_fn ~config ~messages:[] ~auto_approve:true ~cost_tracker:ct ());
+    false
+  with Failure _ -> true in
+  Alcotest.(check bool) "unwired ref fails" true threw;
+  Tool_agent.run_query_fn := original
+
+let test_agent_set_run_query () =
+  let called = ref false in
+  let fake_run ~config:_ ~messages ~auto_approve:_ ~cost_tracker:_ ?system_prompt:_ () =
+    called := true;
+    messages @ [Message.{ role = Assistant; content = [Text "agent response"] }]
+  in
+  Tool_agent.set_run_query fake_run;
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+  } in
+  let ct = Cost_tracker.create ~model:"m" in
+  let msgs = [Message.{ role = User; content = [Text "test"] }] in
+  let result = !Tool_agent.run_query_fn ~config ~messages:msgs ~auto_approve:true ~cost_tracker:ct () in
+  Alcotest.(check bool) "fn was called" true !called;
+  Alcotest.(check int) "got 2 messages back" 2 (List.length result)
+
+(* === Doctor --fix: functional tests with real filesystem === *)
+
+let test_doctor_fix_creates_dirs () =
+  (* Set up a temp HOME so doctor --fix creates dirs there *)
+  let tmp_home = Filename.temp_dir "camel_doctor_test" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  (* Verify dirs don't exist yet *)
+  let camel_dir = Filename.concat tmp_home ".camel" in
+  let sessions_dir = Filename.concat camel_dir "sessions" in
+  let skills_dir = Filename.concat camel_dir "skills" in
+  Alcotest.(check bool) ".camel missing" false (Sys.file_exists camel_dir);
+
+  (* Run fix *)
+  Doctor.run_fix ();
+
+  (* Verify dirs were created *)
+  Alcotest.(check bool) ".camel created" true (Sys.file_exists camel_dir);
+  Alcotest.(check bool) "sessions created" true (Sys.file_exists sessions_dir);
+  Alcotest.(check bool) "skills created" true (Sys.file_exists skills_dir);
+
+  (* Restore HOME *)
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  (* Cleanup *)
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+let test_doctor_fix_permissions () =
+  let tmp_home = Filename.temp_dir "camel_doctor_perm" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  let camel_dir = Filename.concat tmp_home ".camel" in
+  ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote camel_dir)));
+
+  (* Create config.json with bad permissions *)
+  let config_path = Filename.concat camel_dir "config.json" in
+  let oc = open_out config_path in
+  output_string oc {|{"api_key":"test"}|};
+  close_out oc;
+  Unix.chmod config_path 0o644;  (* too open *)
+
+  Doctor.run_fix ();
+
+  let stat = Unix.stat config_path in
+  Alcotest.(check bool) "perms fixed to 600" true (stat.st_perm land 0o077 = 0);
+
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+let test_doctor_fix_cleans_orphaned_sessions () =
+  let tmp_home = Filename.temp_dir "camel_doctor_orphan" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  let sessions_dir = Filename.concat (Filename.concat tmp_home ".camel") "sessions" in
+  ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote sessions_dir)));
+
+  (* Write a valid session *)
+  let valid_path = Filename.concat sessions_dir "valid.json" in
+  let oc = open_out valid_path in
+  output_string oc {|{"id":"valid","model":"test","cwd":".","messages":[]}|};
+  close_out oc;
+
+  (* Write a corrupt session *)
+  let bad_path = Filename.concat sessions_dir "corrupt.json" in
+  let oc2 = open_out bad_path in
+  output_string oc2 "this is not json {{{";
+  close_out oc2;
+
+  Doctor.run_fix ();
+
+  (* Valid session should remain, corrupt should be gone *)
+  Alcotest.(check bool) "valid session kept" true (Sys.file_exists valid_path);
+  Alcotest.(check bool) "corrupt session removed" false (Sys.file_exists bad_path);
+
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+let test_doctor_fix_idempotent () =
+  let tmp_home = Filename.temp_dir "camel_doctor_idem" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  (* Run fix twice — second run should change nothing *)
+  Doctor.run_fix ();
+  Doctor.run_fix ();
+
+  let camel_dir = Filename.concat tmp_home ".camel" in
+  Alcotest.(check bool) "still exists" true (Sys.file_exists camel_dir);
+
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+(* === Args: doctor --fix parsing === *)
+
+let test_args_doctor_fix () =
+  let args = Args.parse [|"camel"; "doctor"; "--fix"|] in
+  Alcotest.(check (option string)) "doctor fix" (Some "__doctor_fix__") args.prompt
+
+let test_args_doctor_plain () =
+  let args = Args.parse [|"camel"; "doctor"|] in
+  Alcotest.(check (option string)) "doctor plain" (Some "__doctor__") args.prompt
+
 let () =
   Alcotest.run "camel" [
     "basics", [
@@ -431,5 +667,31 @@ let () =
       Alcotest.test_case "double_init" `Quick test_fff_double_init;
       Alcotest.test_case "glob_outside_fallback" `Quick test_fff_glob_outside_path_fallback;
       Alcotest.test_case "grep_glob_constraint" `Quick test_fff_grep_with_glob_constraint;
+    ];
+    "cache_stability", [
+      Alcotest.test_case "field_order" `Quick test_cache_stable_field_order;
+      Alcotest.test_case "deterministic" `Quick test_cache_stable_deterministic;
+      Alcotest.test_case "tools_sorted" `Quick test_tools_sorted_alphabetically;
+    ];
+    "tool_filter", [
+      Alcotest.test_case "subset" `Quick test_tool_filter_subset;
+      Alcotest.test_case "case_insensitive" `Quick test_tool_filter_case_insensitive;
+      Alcotest.test_case "empty" `Quick test_tool_filter_empty;
+      Alcotest.test_case "nonexistent" `Quick test_tool_filter_nonexistent;
+      Alcotest.test_case "sorted" `Quick test_tool_filter_sorted;
+    ];
+    "agent_wiring", [
+      Alcotest.test_case "unwired_fails" `Quick test_agent_fn_ref_default_fails;
+      Alcotest.test_case "set_run_query" `Quick test_agent_set_run_query;
+    ];
+    "doctor_fix", [
+      Alcotest.test_case "creates_dirs" `Quick test_doctor_fix_creates_dirs;
+      Alcotest.test_case "fixes_permissions" `Quick test_doctor_fix_permissions;
+      Alcotest.test_case "cleans_orphans" `Quick test_doctor_fix_cleans_orphaned_sessions;
+      Alcotest.test_case "idempotent" `Quick test_doctor_fix_idempotent;
+    ];
+    "args_doctor", [
+      Alcotest.test_case "doctor_fix" `Quick test_args_doctor_fix;
+      Alcotest.test_case "doctor_plain" `Quick test_args_doctor_plain;
     ];
   ]

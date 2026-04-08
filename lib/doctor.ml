@@ -92,3 +92,96 @@ let run_all () =
     Printf.printf "  %s\n\n" (green "All checks passed!")
   else
     Printf.printf "  %s\n\n" (red (Printf.sprintf "%d check(s) failed" (List.length failures)))
+
+(** Auto-fix common issues. *)
+let run_fix () =
+  let green s = Printf.sprintf "\027[32m%s\027[0m" s in
+  let yellow s = Printf.sprintf "\027[33m%s\027[0m" s in
+  let dim s = Printf.sprintf "\027[2m%s\027[0m" s in
+  Printf.printf "\n\027[1m🐫 Camel Code Doctor --fix\027[0m\n\n";
+  let fixed = ref 0 in
+  let skipped = ref 0 in
+
+  let home = match Sys.getenv_opt "HOME" with Some h -> h | None -> "." in
+  let camel_dir = Filename.concat home ".camel" in
+  let sessions_dir = Filename.concat camel_dir "sessions" in
+  let skills_dir = Filename.concat camel_dir "skills" in
+
+  (* Fix 1: Create ~/.camel if missing *)
+  if not (Sys.file_exists camel_dir) then begin
+    ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote camel_dir)));
+    Printf.printf "  %s Created %s\n" (green "✓") camel_dir;
+    incr fixed
+  end else begin
+    Printf.printf "  %s %s already exists\n" (dim "·") camel_dir;
+    incr skipped
+  end;
+
+  (* Fix 2: Create sessions dir if missing *)
+  if not (Sys.file_exists sessions_dir) then begin
+    ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote sessions_dir)));
+    Printf.printf "  %s Created %s\n" (green "✓") sessions_dir;
+    incr fixed
+  end else begin
+    Printf.printf "  %s %s already exists\n" (dim "·") sessions_dir;
+    incr skipped
+  end;
+
+  (* Fix 3: Create skills dir if missing *)
+  if not (Sys.file_exists skills_dir) then begin
+    ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote skills_dir)));
+    Printf.printf "  %s Created %s\n" (green "✓") skills_dir;
+    incr fixed
+  end else begin
+    Printf.printf "  %s %s already exists\n" (dim "·") skills_dir;
+    incr skipped
+  end;
+
+  (* Fix 4: Fix permissions on config.json if it exists *)
+  let config_path = Filename.concat camel_dir "config.json" in
+  if Sys.file_exists config_path then begin
+    let stat = Unix.stat config_path in
+    if stat.st_perm land 0o077 <> 0 then begin
+      Unix.chmod config_path 0o600;
+      Printf.printf "  %s Fixed permissions on %s (now 600)\n" (green "✓") config_path;
+      incr fixed
+    end else begin
+      Printf.printf "  %s %s permissions OK\n" (dim "·") config_path;
+      incr skipped
+    end
+  end;
+
+  (* Fix 5: Clean orphaned session files (invalid JSON) *)
+  if Sys.file_exists sessions_dir then begin
+    let files = Sys.readdir sessions_dir |> Array.to_list in
+    let orphans = List.filter (fun f ->
+      if Filename.check_suffix f ".json" then begin
+        let path = Filename.concat sessions_dir f in
+        try
+          let ic = open_in path in
+          let n = in_channel_length ic in
+          let content = really_input_string ic n in
+          close_in ic;
+          let _json = Yojson.Safe.from_string content in
+          false
+        with _ -> true
+      end else false
+    ) files in
+    if orphans <> [] then begin
+      List.iter (fun f ->
+        let path = Filename.concat sessions_dir f in
+        Sys.remove path
+      ) orphans;
+      Printf.printf "  %s Cleaned %d orphaned session file(s)\n" (green "✓") (List.length orphans);
+      incr fixed
+    end else begin
+      Printf.printf "  %s No orphaned sessions\n" (dim "·");
+      incr skipped
+    end
+  end;
+
+  Printf.printf "\n";
+  if !fixed > 0 then
+    Printf.printf "  %s\n\n" (green (Printf.sprintf "Fixed %d issue(s), %d already OK" !fixed !skipped))
+  else
+    Printf.printf "  %s\n\n" (yellow "Nothing to fix — everything looks good")

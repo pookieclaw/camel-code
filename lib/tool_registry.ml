@@ -48,3 +48,31 @@ let tools_to_json () =
       ("input_schema", T.input_schema);
     ]
   ) (all_tools @ !mcp_tools)
+
+(** Sort packed tools alphabetically by name. *)
+let sort_tools tools =
+  List.sort (fun (module A : S) (module B : S) ->
+    String.compare A.name B.name
+  ) tools
+
+(** Convert a tool list to JSON. *)
+let packed_to_json tools =
+  List.map (fun (module T : S) ->
+    `Assoc [
+      ("name", `String T.name);
+      ("description", `String T.description);
+      ("input_schema", T.input_schema);
+    ]
+  ) tools
+
+(** Convert tools to sorted JSON — deterministic order for prompt cache stability. *)
+let tools_to_json_sorted () =
+  packed_to_json (sort_tools (all_tools @ !mcp_tools))
+
+(** Convert only the named tools to sorted JSON. *)
+let tools_to_json_filtered names =
+  let all = all_tools @ !mcp_tools in
+  let filtered = List.filter (fun (module T : S) ->
+    List.exists (fun n -> String.lowercase_ascii n = String.lowercase_ascii T.name) names
+  ) all in
+  packed_to_json (sort_tools filtered)

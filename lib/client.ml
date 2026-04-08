@@ -11,17 +11,18 @@ type stream_error =
 
 let build_body ~(config : Config.t) ~messages ~system_prompt =
   let msgs = List.map Message.message_to_json_compact messages in
-  let parts = [
-    ("model", `String config.model);
-    ("max_tokens", `Int config.max_tokens);
-    ("stream", `Bool true);
-    ("messages", `List msgs);
-  ] in
+  let parts = [] in
   let parts = match system_prompt with
     | Some s -> ("system", `String s) :: parts
     | None -> parts
   in
-  Yojson.Safe.to_string (`Assoc parts)
+  let parts = List.rev_append [
+    ("model", `String config.model);
+    ("max_tokens", `Int config.max_tokens);
+    ("stream", `Bool true);
+  ] parts in
+  let parts = ("messages", `List msgs) :: parts in
+  Yojson.Safe.to_string (`Assoc (List.rev parts))
 
 (** Global ref to the current curl pid, for Ctrl-C abort. *)
 let current_curl_pid : int option ref = ref None
