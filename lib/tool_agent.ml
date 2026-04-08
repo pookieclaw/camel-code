@@ -36,7 +36,6 @@ let execute ~input ~cwd =
 
   let config = Config.create () in
   let ct = Cost_tracker.create ~model:config.model in
-  let tools = ["Read"; "Grep"; "Glob"] in
   let system_prompt = Printf.sprintf
     "You are a research subagent. Use Read, Grep, and Glob tools to investigate. Working directory: %s"
     cwd in

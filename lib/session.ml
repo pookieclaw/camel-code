@@ -52,7 +52,7 @@ let git_branch () =
   branch
 
 (** Save a session to disk. *)
-let save ~id ~model ?(label = None) ~messages =
+let save ~id ~model ~messages ?(label = None) () =
   let dir = session_dir () in
   ensure_dir dir;
   let path = Filename.concat dir (id ^ ".json") in

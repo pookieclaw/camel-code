@@ -109,7 +109,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
             flush stdout;
             !msgs);
 
-          Session.save ~id:session_id ~model:config.model ~messages:!msgs;
+          Session.save ~id:session_id ~model:config.model ~messages:!msgs ();
 
           (* Re-enter TUI *)
           let _new_termios = Tui_ansi.enable_raw_mode () in

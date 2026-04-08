@@ -213,7 +213,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          let mode_label = if auto_approve then "auto-approve on" else "ask mode" in
          Printf.printf "  %s %s   %s   %s\n\n"
            (dim "\xE2\x97\x8F") (dim mode_label) (dim "/help") (yellow (Printf.sprintf "%s" config.model));
-         Session.save ~id:session_id ~model:config.model ~messages:!msgs)
+         Session.save ~id:session_id ~model:config.model ~messages:!msgs ())
   done;
 
   Printf.printf "\n%s\n" (dim (Cost_tracker.summary ct))

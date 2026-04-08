@@ -663,8 +663,9 @@ let test_session_save_with_git_info () =
   let sessions_dir = Filename.concat (Filename.concat tmp_home ".camel") "sessions" in
   ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote sessions_dir)));
 
-  Session.save ~id:"test-enriched" ~model:"test" ~label:(Some "my-label")
-    ~messages:[Message.{ role = User; content = [Text "hello"] }];
+  Session.save ~id:"test-enriched" ~model:"test"
+    ~messages:[Message.{ role = User; content = [Text "hello"] }]
+    ~label:(Some "my-label") ();
 
   let path = Filename.concat sessions_dir "test-enriched.json" in
   Alcotest.(check bool) "session file created" true (Sys.file_exists path);
@@ -693,8 +694,9 @@ let test_session_meta_has_fields () =
   let sessions_dir = Filename.concat (Filename.concat tmp_home ".camel") "sessions" in
   ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote sessions_dir)));
 
-  Session.save ~id:"meta-test" ~model:"test" ~label:(Some "labeled")
-    ~messages:[Message.{ role = User; content = [Text "hi"] }];
+  Session.save ~id:"meta-test" ~model:"test"
+    ~messages:[Message.{ role = User; content = [Text "hi"] }]
+    ~label:(Some "labeled") ();
 
   let sessions = Session.list_sessions () in
   Alcotest.(check bool) "found session" true (List.length sessions >= 1);
