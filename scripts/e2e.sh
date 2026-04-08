@@ -10,6 +10,7 @@ banner() { printf "\n${C}${B}━━━ %s ━━━${X}\n\n" "$1"; }
 step()   { printf "  ${Y}▸${X} %s\n" "$1"; }
 ok()     { printf "  ${G}✓${X} %s\n" "$1"; }
 fail()   { printf "  ${R}✗${X} %s\n" "$1"; }
+show()   { printf "  ${D}%s${X}\n" "$1"; }
 pause()  { sleep "${DEMO_SPEED:-2}"; }
 
 eval "$(opam env 2>/dev/null || true)"
