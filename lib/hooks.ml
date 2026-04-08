@@ -3,6 +3,8 @@
 type hook_event =
   | PreToolUse
   | PostToolUse
+  | PreQuery
+  | PostQuery
   | SessionStart
   | UserPromptSubmit
   | Notification
@@ -21,6 +23,8 @@ type hook_result = {
 let event_to_string = function
   | PreToolUse -> "PreToolUse"
   | PostToolUse -> "PostToolUse"
+  | PreQuery -> "PreQuery"
+  | PostQuery -> "PostQuery"
   | SessionStart -> "SessionStart"
   | UserPromptSubmit -> "UserPromptSubmit"
   | Notification -> "Notification"
@@ -28,6 +32,8 @@ let event_to_string = function
 let string_to_event = function
   | "PreToolUse" -> Some PreToolUse
   | "PostToolUse" -> Some PostToolUse
+  | "PreQuery" -> Some PreQuery
+  | "PostQuery" -> Some PostQuery
   | "SessionStart" -> Some SessionStart
   | "UserPromptSubmit" -> Some UserPromptSubmit
   | "Notification" -> Some Notification

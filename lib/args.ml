@@ -35,6 +35,7 @@ let parse argv =
      | "-h" | "--help" -> r := { !r with help = true }
      | "--resume" -> r := { !r with resume = Some (next ()) }
      | "--continue" | "-c" -> r := { !r with continue_last = true }
+     | "daemon" when !r.prompt = None -> r := { !r with prompt = Some "__daemon__" }
      | "login" when !r.prompt = None -> r := { !r with prompt = Some "__login__" }
      | "doctor" when !r.prompt = None ->
        (* Peek ahead for --fix flag *)

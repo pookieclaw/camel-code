@@ -198,9 +198,14 @@ let cmd_resume = {
       ShowMessage "No saved sessions."
     else begin
       let lines = List.map (fun (s : Session.session_meta) ->
-        Printf.sprintf "  %s  %s  %s  (%d msgs)"
+        let context = match s.git_repo, s.git_branch with
+          | Some r, Some b -> Printf.sprintf " %s/%s" r b
+          | Some r, None -> Printf.sprintf " %s" r
+          | None, _ -> "" in
+        let lbl = match s.label with Some l -> Printf.sprintf " [%s]" l | None -> "" in
+        Printf.sprintf "  %s  %s  %s  (%d msgs)%s%s"
           (String.sub s.id 0 (min 8 (String.length s.id)))
-          s.started_at s.model s.message_count
+          s.started_at s.model s.message_count context lbl
       ) sessions in
       ShowMessage ("Sessions:\n" ^ String.concat "\n" lines ^
         "\n\nUse: camel --resume <id>")

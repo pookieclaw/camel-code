@@ -16,6 +16,8 @@ let print_help () =
   Printf.printf "  -h, --help            Show this help\n";
   Printf.printf "\nCommands:\n";
   Printf.printf "  doctor                Run diagnostic checks\n";
+  Printf.printf "  doctor --fix          Auto-fix common issues\n";
+  Printf.printf "  daemon                Start as background server (Unix socket)\n";
   Printf.printf "  login                 Authenticate via OAuth\n";
   Printf.printf "\nExamples:\n";
   Printf.printf "  camel                         Interactive REPL\n";
@@ -97,6 +99,8 @@ let () =
     Doctor.run_all ()
   | Some "__doctor_fix__" ->
     Doctor.run_fix ()
+  | Some "__daemon__" ->
+    Daemon.start ~config ~auto_approve:args.yes ()
   | Some "__login__" ->
     (match Oauth.login () with
      | Some _ -> Printf.printf "Login successful!\n"

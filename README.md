@@ -12,6 +12,19 @@ https://github.com/pookieclaw/camel-code/raw/main/docs/demo.mov
 
 > *Version check, diagnostics, single-shot query, file write/read with tools, bash execution, file editing, and interactive REPL with slash commands.*
 
+## Features
+
+- **14 built-in tools** + dynamic MCP tools
+- **Prompt cache optimization** — deterministic payload ordering for 90% input token savings
+- **Tooled subagents** — Agent tool gets Read/Grep/Glob for actual codebase research
+- **Provider failover** — automatic retry with fallback model/key on rate limits
+- **Lazy MCP** — server connections deferred until first tool invocation
+- **Pre/post query hooks** — run shell commands before/after each API call
+- **Session enrichment** — sessions tagged with git repo, branch, and labels
+- **Daemon mode** — Unix socket server for editor/web integration
+- **Doctor --fix** — auto-repair common environment issues
+- **Vim mode**, permissions, skills, hooks, MCP, sessions
+
 ## Quick Start
 
 ```bash
@@ -52,6 +65,9 @@ camel --resume <session-id>
 # Run diagnostics
 camel doctor
 
+# Auto-fix common issues (missing dirs, bad permissions, corrupt sessions)
+camel doctor --fix
+
 # Show version
 camel --version
 ```
@@ -86,7 +102,7 @@ Camel Code has 14 built-in tools, matching Claude Code's core set:
 | **Glob** | Find files by pattern (fff-accelerated) |
 | **Grep** | Search file contents with regex (fff-accelerated) |
 | **MultiGrep** | Multi-pattern OR search (fff-accelerated) |
-| **Agent** | Spawn subagents for complex tasks |
+| **Agent** | Spawn subagents with Read/Grep/Glob tools |
 | **WebFetch** | Fetch URL content |
 | **AskUserQuestion** | Prompt user for input |
 | **Sleep** | Pause execution |
@@ -132,6 +148,22 @@ Add to `~/.camel/settings.json`:
 }
 ```
 
+### Provider Failback
+
+Set a fallback model or API key in `~/.camel/config.json`:
+
+```json
+{
+  "api_key": "sk-ant-primary...",
+  "fallback_model": "claude-haiku-4-5-20251001",
+  "fallback_api_key": "sk-ant-backup..."
+}
+```
+
+Or via environment: `CAMEL_FALLBACK_MODEL`, `CAMEL_FALLBACK_API_KEY`.
+
+On rate limits or overload, camel automatically retries with the fallback.
+
 ### Hooks
 
 ```json
@@ -139,10 +171,18 @@ Add to `~/.camel/settings.json`:
   "hooks": {
     "PreToolUse": [
       { "command": "./my-hook.sh", "matcher": "Bash" }
+    ],
+    "PreQuery": [
+      { "command": "./log-query.sh" }
+    ],
+    "PostQuery": [
+      { "command": "./track-usage.sh" }
     ]
   }
 }
 ```
+
+Hook events: `PreToolUse`, `PostToolUse`, `PreQuery`, `PostQuery`, `SessionStart`, `UserPromptSubmit`, `Notification`.
 
 ### Permission Rules
 
@@ -154,6 +194,35 @@ Add to `~/.camel/settings.json`:
   }
 }
 ```
+
+## Daemon Mode
+
+Run camel as a background server that accepts JSON commands over a Unix socket:
+
+```bash
+camel daemon
+# Listening on ~/.camel/daemon.sock
+
+# From another terminal:
+echo '{"method": "query", "params": {"prompt": "What is OCaml?"}}' | socat - UNIX-CONNECT:~/.camel/daemon.sock
+echo '{"method": "status"}' | socat - UNIX-CONNECT:~/.camel/daemon.sock
+echo '{"method": "shutdown"}' | socat - UNIX-CONNECT:~/.camel/daemon.sock
+```
+
+Methods: `query` (send a prompt), `status` (check server), `shutdown` (stop daemon).
+
+This is the foundation for editor plugins (Neovim, VS Code), web UIs, and multi-terminal shared sessions.
+
+## Prompt Cache Optimization
+
+API request payloads are structured for maximum Anthropic prompt cache hits:
+
+1. **System prompt** (stable across turns) — cached prefix
+2. **Model config** (stable per session)
+3. **Tools** (sorted alphabetically, stable per session)
+4. **Messages** (changes every turn) — always last, never cached
+
+This means the first ~90% of each request is identical turn-to-turn, so Anthropic can serve it from cache at 1/10th the input token cost.
 
 ## Architecture
 

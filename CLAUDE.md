@@ -43,12 +43,20 @@ Built with:
 
 ## Phases
 
-0. Repo setup (current)
-1. API streaming + REPL
-2. Tool system + 6 core tools
-3. TUI (notty/nottui/lwd)
-4. Sessions, config, commands
-5. MCP, agents, hooks, skills
-6. Vim mode, keybindings, permissions
-7. OAuth, bridge, coordinator
-8. Polish, remaining tools, tests
+0. Repo setup ✓
+1. API streaming + REPL ✓
+2. Tool system + 6 core tools ✓
+3. TUI (notty/nottui/lwd) ✓
+4. Sessions, config, commands ✓
+5. MCP, agents, hooks, skills ✓
+6. Vim mode, keybindings, permissions ✓
+7. OAuth, bridge, coordinator (partial)
+8. Polish, remaining tools, tests (in progress)
+   - Prompt cache stability ✓
+   - Tooled subagents (Read/Grep/Glob) ✓
+   - Provider failover ✓
+   - Lazy MCP connections ✓
+   - Pre/post query hooks ✓
+   - Session enrichment (git repo/branch/label) ✓
+   - Doctor --fix ✓
+   - Daemon mode (Unix socket) ✓

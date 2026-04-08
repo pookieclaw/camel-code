@@ -153,24 +153,57 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ?(t
   (* Finalize — tool names are resolved inside Streaming.finalize via acc.tool_names *)
   Streaming.finalize acc
 
+(** Check if an error message is retryable (rate limit or overload). *)
+let is_retryable_error msg =
+  let m = String.lowercase_ascii msg in
+  List.exists (fun pat -> try ignore (Str.search_forward (Str.regexp_string pat) m 0); true with Not_found -> false)
+    ["rate limit"; "overloaded"; "529"; "too many requests"; "capacity"]
+
 (** Main agentic query loop. *)
 let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filter () =
   let msgs = ref messages in
+  let active_config = ref config in
 
   let rec loop () =
     Printf.printf "\n";
     flush stdout;
 
+    (* Pre-query hooks *)
+    let msg_count = List.length !msgs in
+    let _pre_results = Hooks.run_hooks PreQuery
+      ~input:(`Assoc [("message_count", `Int msg_count); ("model", `String !active_config.model)]) () in
+
     (* Accumulate full response for markdown rendering *)
     let response_buf = Buffer.create 1024 in
     let (response, _stop, usage) =
       try
-        stream_with_tools ~config ~messages:!msgs ~system_prompt ~tool_filter
+        stream_with_tools ~config:!active_config ~messages:!msgs ~system_prompt ~tool_filter
           ~on_text:(fun t -> Buffer.add_string response_buf t; print_string t; flush stdout) ()
-      with Failure msg ->
+      with Failure msg when is_retryable_error msg ->
+        (* Try fallback if available *)
+        (match Config.to_fallback !active_config with
+         | Some fb_config ->
+           Printf.printf "\n%s %s\n" (yellow "Retrying with fallback:")
+             (dim (Printf.sprintf "%s" fb_config.model));
+           flush stdout;
+           active_config := fb_config;
+           Buffer.clear response_buf;
+           (try
+             stream_with_tools ~config:fb_config ~messages:!msgs ~system_prompt ~tool_filter
+               ~on_text:(fun t -> Buffer.add_string response_buf t; print_string t; flush stdout) ()
+           with Failure msg2 ->
+             Printf.printf "\n%s %s\n" (red "Error:") msg2;
+             flush stdout;
+             let err_msg = Message.{ role = Assistant; content = [Text (Printf.sprintf "[API Error: %s]" msg2)] } in
+             (err_msg, None, Message.empty_usage))
+         | None ->
+           Printf.printf "\n%s %s\n" (red "Error:") msg;
+           flush stdout;
+           let err_msg = Message.{ role = Assistant; content = [Text (Printf.sprintf "[API Error: %s]" msg)] } in
+           (err_msg, None, Message.empty_usage))
+      | Failure msg ->
         Printf.printf "\n%s %s\n" (red "Error:") msg;
         flush stdout;
-        (* Return an error as assistant message so conversation can continue *)
         let err_msg = Message.{ role = Assistant; content = [Text (Printf.sprintf "[API Error: %s]" msg)] } in
         (err_msg, None, Message.empty_usage)
     in
@@ -178,6 +211,14 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filte
     Printf.printf "\n";
     flush stdout;
     Cost_tracker.add_turn cost_tracker usage;
+
+    (* Post-query hooks *)
+    let _post_results = Hooks.run_hooks PostQuery
+      ~input:(`Assoc [
+        ("input_tokens", `Int usage.input_tokens);
+        ("output_tokens", `Int usage.output_tokens);
+        ("model", `String !active_config.model);
+      ]) () in
 
     (* Per-turn cost *)
     let turn_cost =

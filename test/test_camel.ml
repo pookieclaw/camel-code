@@ -372,6 +372,7 @@ let test_cache_stable_field_order () =
   let config = Config.{
     api_key = "test-key"; model = "test-model";
     max_tokens = 1024; base_url = "http://localhost";
+    fallback_model = None; fallback_api_key = None;
   } in
   let messages = [Message.{ role = User; content = [Text "hello"] }] in
   let body = Client.build_body ~config ~messages ~system_prompt:(Some "You are helpful") in
@@ -391,6 +392,7 @@ let test_cache_stable_field_order () =
 let test_cache_stable_deterministic () =
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
   } in
   let messages = [Message.{ role = User; content = [Text "test"] }] in
   let body1 = Client.build_body ~config ~messages ~system_prompt:(Some "sys") in
@@ -463,6 +465,7 @@ let test_agent_fn_ref_default_fails () =
     failwith "not wired");
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
   } in
   let ct = Cost_tracker.create ~model:"m" in
   let threw = try
@@ -481,6 +484,7 @@ let test_agent_set_run_query () =
   Tool_agent.set_run_query fake_run;
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
   } in
   let ct = Cost_tracker.create ~model:"m" in
   let msgs = [Message.{ role = User; content = [Text "test"] }] in
@@ -592,6 +596,192 @@ let test_args_doctor_plain () =
   let args = Args.parse [|"camel"; "doctor"|] in
   Alcotest.(check (option string)) "doctor plain" (Some "__doctor__") args.prompt
 
+let test_args_daemon () =
+  let args = Args.parse [|"camel"; "daemon"|] in
+  Alcotest.(check (option string)) "daemon" (Some "__daemon__") args.prompt
+
+(* === Provider failover: config fallback === *)
+
+let test_config_fallback_none () =
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
+  } in
+  Alcotest.(check bool) "no fallback" true (Config.to_fallback config = None)
+
+let test_config_fallback_model () =
+  let config = Config.{
+    api_key = "k"; model = "primary"; max_tokens = 100; base_url = "http://x";
+    fallback_model = Some "secondary"; fallback_api_key = None;
+  } in
+  match Config.to_fallback config with
+  | Some fb ->
+    Alcotest.(check string) "fallback model" "secondary" fb.model;
+    Alcotest.(check string) "same key" "k" fb.api_key;
+    Alcotest.(check bool) "no nested fallback" true (fb.fallback_model = None)
+  | None -> Alcotest.fail "expected fallback config"
+
+let test_config_fallback_key () =
+  let config = Config.{
+    api_key = "primary-key"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = Some "backup-key";
+  } in
+  match Config.to_fallback config with
+  | Some fb ->
+    Alcotest.(check string) "fallback key" "backup-key" fb.api_key;
+    Alcotest.(check string) "same model" "m" fb.model
+  | None -> Alcotest.fail "expected fallback config"
+
+let test_config_fallback_both () =
+  let config = Config.{
+    api_key = "k1"; model = "m1"; max_tokens = 100; base_url = "http://x";
+    fallback_model = Some "m2"; fallback_api_key = Some "k2";
+  } in
+  match Config.to_fallback config with
+  | Some fb ->
+    Alcotest.(check string) "model" "m2" fb.model;
+    Alcotest.(check string) "key" "k2" fb.api_key
+  | None -> Alcotest.fail "expected fallback config"
+
+(* === Retryable error detection === *)
+
+let test_retryable_rate_limit () =
+  Alcotest.(check bool) "rate limit" true (Query.is_retryable_error "Rate limit exceeded");
+  Alcotest.(check bool) "overloaded" true (Query.is_retryable_error "API is overloaded");
+  Alcotest.(check bool) "529" true (Query.is_retryable_error "529 Service Unavailable");
+  Alcotest.(check bool) "capacity" true (Query.is_retryable_error "At capacity, try later");
+  Alcotest.(check bool) "normal error" false (Query.is_retryable_error "Invalid API key");
+  Alcotest.(check bool) "random" false (Query.is_retryable_error "something broke")
+
+(* === Session enrichment === *)
+
+let test_session_save_with_git_info () =
+  let tmp_home = Filename.temp_dir "camel_session_git" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  let sessions_dir = Filename.concat (Filename.concat tmp_home ".camel") "sessions" in
+  ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote sessions_dir)));
+
+  Session.save ~id:"test-enriched" ~model:"test" ~label:(Some "my-label")
+    ~messages:[Message.{ role = User; content = [Text "hello"] }];
+
+  let path = Filename.concat sessions_dir "test-enriched.json" in
+  Alcotest.(check bool) "session file created" true (Sys.file_exists path);
+
+  let ic = open_in path in
+  let n = in_channel_length ic in
+  let content = really_input_string ic n in
+  close_in ic;
+  let json = Yojson.Safe.from_string content in
+  let open Yojson.Safe.Util in
+  (* Label should be present *)
+  let label = match member "label" json with `String s -> Some s | _ -> None in
+  Alcotest.(check (option string)) "label saved" (Some "my-label") label;
+  (* Messages should be there *)
+  let msgs = json |> member "messages" |> to_list in
+  Alcotest.(check int) "1 message" 1 (List.length msgs);
+
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+let test_session_meta_has_fields () =
+  let tmp_home = Filename.temp_dir "camel_session_meta" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  let sessions_dir = Filename.concat (Filename.concat tmp_home ".camel") "sessions" in
+  ignore (Sys.command (Printf.sprintf "mkdir -p %s" (Filename.quote sessions_dir)));
+
+  Session.save ~id:"meta-test" ~model:"test" ~label:(Some "labeled")
+    ~messages:[Message.{ role = User; content = [Text "hi"] }];
+
+  let sessions = Session.list_sessions () in
+  Alcotest.(check bool) "found session" true (List.length sessions >= 1);
+  let s = List.hd sessions in
+  Alcotest.(check (option string)) "label in meta" (Some "labeled") s.label;
+
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+(* === Hooks: new event types === *)
+
+let test_hook_event_roundtrip () =
+  let events = [Hooks.PreToolUse; PostToolUse; PreQuery; PostQuery;
+                SessionStart; UserPromptSubmit; Notification] in
+  List.iter (fun ev ->
+    let s = Hooks.event_to_string ev in
+    let ev2 = Hooks.string_to_event s in
+    Alcotest.(check bool) (Printf.sprintf "roundtrip %s" s) true (ev2 = Some ev)
+  ) events
+
+let test_hook_pre_post_query_events () =
+  Alcotest.(check (option string)) "PreQuery string" (Some "PreQuery")
+    (match Hooks.string_to_event "PreQuery" with Some e -> Some (Hooks.event_to_string e) | None -> None);
+  Alcotest.(check (option string)) "PostQuery string" (Some "PostQuery")
+    (match Hooks.string_to_event "PostQuery" with Some e -> Some (Hooks.event_to_string e) | None -> None)
+
+(* === Lazy MCP === *)
+
+let test_lazy_mcp_no_servers () =
+  let tmp_home = Filename.temp_dir "camel_mcp_test" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+
+  (* No settings.json — should create empty manager *)
+  let mgr = Mcp_manager.create_lazy () in
+  Alcotest.(check int) "no servers" 0 (Mcp_manager.server_count mgr);
+  Alcotest.(check int) "none connected" 0 (Mcp_manager.connected_count mgr);
+
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)))
+
+(* === Daemon: command handling === *)
+
+let test_daemon_status_command () =
+  let config = Config.{
+    api_key = "k"; model = "test-model"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
+  } in
+  let json = `Assoc [("method", `String "status")] in
+  let (response, continue) = Daemon.handle_command ~config ~auto_approve:true json in
+  Alcotest.(check bool) "continues" true continue;
+  let open Yojson.Safe.Util in
+  Alcotest.(check string) "status running" "running" (response |> member "status" |> to_string);
+  Alcotest.(check string) "model" "test-model" (response |> member "model" |> to_string)
+
+let test_daemon_shutdown_command () =
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
+  } in
+  let json = `Assoc [("method", `String "shutdown")] in
+  let (_response, continue) = Daemon.handle_command ~config ~auto_approve:true json in
+  Alcotest.(check bool) "stops" false continue
+
+let test_daemon_unknown_method () =
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
+  } in
+  let json = `Assoc [("method", `String "bogus")] in
+  let (response, continue) = Daemon.handle_command ~config ~auto_approve:true json in
+  Alcotest.(check bool) "continues" true continue;
+  let open Yojson.Safe.Util in
+  let err = response |> member "error" |> to_string in
+  Alcotest.(check bool) "has error" true (String.length err > 0)
+
+let test_daemon_query_missing_prompt () =
+  let config = Config.{
+    api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    fallback_model = None; fallback_api_key = None;
+  } in
+  let json = `Assoc [("method", `String "query"); ("params", `Assoc [])] in
+  let (response, _) = Daemon.handle_command ~config ~auto_approve:true json in
+  let open Yojson.Safe.Util in
+  Alcotest.(check string) "missing prompt error" "missing prompt"
+    (response |> member "error" |> to_string)
+
 let () =
   Alcotest.run "camel" [
     "basics", [
@@ -693,5 +883,30 @@ let () =
     "args_doctor", [
       Alcotest.test_case "doctor_fix" `Quick test_args_doctor_fix;
       Alcotest.test_case "doctor_plain" `Quick test_args_doctor_plain;
+      Alcotest.test_case "daemon" `Quick test_args_daemon;
+    ];
+    "failover", [
+      Alcotest.test_case "no_fallback" `Quick test_config_fallback_none;
+      Alcotest.test_case "fallback_model" `Quick test_config_fallback_model;
+      Alcotest.test_case "fallback_key" `Quick test_config_fallback_key;
+      Alcotest.test_case "fallback_both" `Quick test_config_fallback_both;
+      Alcotest.test_case "retryable_errors" `Quick test_retryable_rate_limit;
+    ];
+    "session_enrichment", [
+      Alcotest.test_case "save_with_label" `Quick test_session_save_with_git_info;
+      Alcotest.test_case "meta_fields" `Quick test_session_meta_has_fields;
+    ];
+    "hooks_events", [
+      Alcotest.test_case "roundtrip" `Quick test_hook_event_roundtrip;
+      Alcotest.test_case "pre_post_query" `Quick test_hook_pre_post_query_events;
+    ];
+    "lazy_mcp", [
+      Alcotest.test_case "no_servers" `Quick test_lazy_mcp_no_servers;
+    ];
+    "daemon", [
+      Alcotest.test_case "status" `Quick test_daemon_status_command;
+      Alcotest.test_case "shutdown" `Quick test_daemon_shutdown_command;
+      Alcotest.test_case "unknown_method" `Quick test_daemon_unknown_method;
+      Alcotest.test_case "missing_prompt" `Quick test_daemon_query_missing_prompt;
     ];
   ]
