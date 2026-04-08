@@ -113,7 +113,7 @@ let start ~(config : Config.t) ~auto_approve () =
   let sock = Unix.socket Unix.PF_UNIX Unix.SOCK_STREAM 0 in
   Unix.bind sock (Unix.ADDR_UNIX path);
   Unix.listen sock 5;
-  Unix.chmod path 0o600;
+  (try Unix.chmod path 0o600 with Unix.Unix_error _ -> ());
 
   Printf.printf "%s Daemon listening on %s (pid %d)\n"
     (green "●") path (Unix.getpid ());

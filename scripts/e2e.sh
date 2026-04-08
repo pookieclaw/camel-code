@@ -66,7 +66,10 @@ echo ""
 dune exec camel -- --yes -p "Say 'session test complete' and nothing else." 2>&1
 echo ""
 step "Last saved session metadata:"
+sleep 0.5  # ensure file is flushed
 LATEST=$(ls -t ~/.camel/sessions/*.json 2>/dev/null | head -1)
+# Show which file we're reading
+show "Reading: $(basename "$LATEST" 2>/dev/null || echo none)"
 if [ -n "$LATEST" ]; then
     for field in id model cwd started_at git_repo git_branch label; do
         val=$(grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$LATEST" 2>/dev/null | head -1 | sed 's/.*: *"//;s/"$//' || true)
