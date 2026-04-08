@@ -68,6 +68,9 @@ camel doctor
 # Auto-fix common issues (missing dirs, bad permissions, corrupt sessions)
 camel doctor --fix
 
+# Start as a background server (Unix socket for editor plugins)
+camel daemon
+
 # Show version
 camel --version
 ```
@@ -235,6 +238,24 @@ This means the first ~90% of each request is identical turn-to-turn, so Anthropi
 | Tools | First-class modules |
 | Build | dune |
 | Binary | Native (zero runtime) |
+
+## Scripts
+
+```bash
+# Unit + integration tests (75 tests)
+dune test
+
+# Live demo of all phase-8 features (runs tests, shows payload structure)
+./scripts/demo.sh
+
+# End-to-end with real API calls (query, tool use, daemon, sessions)
+./scripts/e2e.sh
+
+# Full developer workflow (explore → implement → debug → review → refactor)
+./scripts/workflow.sh
+```
+
+The e2e and workflow scripts require an API key in `~/.camel/config.json`.
 
 ## Why?
 
