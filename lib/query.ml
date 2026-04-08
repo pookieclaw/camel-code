@@ -171,7 +171,7 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filte
     (* Pre-query hooks *)
     let msg_count = List.length !msgs in
     let _pre_results = Hooks.run_hooks PreQuery
-      ~input:(`Assoc [("message_count", `Int msg_count); ("model", `String !active_config.model)]) () in
+      ~input:(`Assoc [("message_count", `Int msg_count); ("model", `String (!active_config).model)]) () in
 
     (* Accumulate full response for markdown rendering *)
     let response_buf = Buffer.create 1024 in
@@ -217,7 +217,7 @@ let run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filte
       ~input:(`Assoc [
         ("input_tokens", `Int usage.input_tokens);
         ("output_tokens", `Int usage.output_tokens);
-        ("model", `String !active_config.model);
+        ("model", `String (!active_config).model);
       ]) () in
 
     (* Per-turn cost *)
