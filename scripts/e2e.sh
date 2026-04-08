@@ -69,12 +69,12 @@ step "Last saved session metadata:"
 LATEST=$(ls -t ~/.camel/sessions/*.json 2>/dev/null | head -1)
 if [ -n "$LATEST" ]; then
     for field in id model cwd started_at git_repo git_branch label; do
-        val=$(grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$LATEST" | head -1 | sed 's/.*: *"//;s/"$//')
+        val=$(grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" "$LATEST" 2>/dev/null | head -1 | sed 's/.*: *"//;s/"$//' || true)
         [ -z "$val" ] && val="(not set)"
         [ "$field" = "id" ] && val="${val:0:12}..."
         printf "    %-16s %s\n" "$field" "$val"
     done
-    msg_count=$(grep -o '"role"' "$LATEST" | wc -l | tr -d ' ')
+    msg_count=$(grep -o '"role"' "$LATEST" 2>/dev/null | wc -l | tr -d ' ' || echo 0)
     printf "    %-16s %s messages\n" "messages" "$msg_count"
     ok "Session saved with git repo and branch"
 else
