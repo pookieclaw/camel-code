@@ -55,15 +55,34 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
     Printf.printf "\n  \xE2\x8E\xBF %s %s\n" (cyan "\xE2\x97\x8F") (bold (cyan desc));
     flush stdout;
 
-    (* Check permission *)
-    let allowed = match T.check_permission ~input ~auto_approve with
-      | Allow -> true
-      | Deny reason ->
-        Printf.printf "  %s %s\n" (red "!") reason;
+    (* Check global permission rules first *)
+    let file_path = Tool_intf.get_string "file_path" input in
+    let global_override = Permissions.check_rules ~tool_name ~file_path in
+
+    (* Check permission: global rules take precedence over tool-level checks *)
+    let allowed = match global_override with
+      | Some false ->
+        Printf.printf "  %s Denied by permission rule\n" (red "!");
         flush stdout;
         false
-      | Ask _prompt -> ask_permission ~tool_name:T.name ~description:desc
+      | Some true -> true
+      | None ->
+        (* No global rule — fall back to tool-level check *)
+        (match T.check_permission ~input ~auto_approve with
+         | Allow -> true
+         | Deny reason ->
+           Printf.printf "  %s %s\n" (red "!") reason;
+           flush stdout;
+           false
+         | Ask _prompt -> ask_permission ~tool_name:T.name ~description:desc)
     in
+
+    (* PreToolUse hooks *)
+    let pre_hook_blocked = if allowed then begin
+      let hook_results = Hooks.run_hooks PreToolUse ~tool_name ~input () in
+      List.exists (fun (r : Hooks.hook_result) -> not r.continue) hook_results
+    end else false in
+    let allowed = allowed && not pre_hook_blocked in
 
     if not allowed then begin
       Printf.printf "  %s\n" (dim "denied");
@@ -119,6 +138,10 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
       if elapsed > 0.5 then
         Printf.printf "  %s\n" (dim (Printf.sprintf "(%.1fs)" elapsed));
       flush stdout;
+
+      (* PostToolUse hooks *)
+      ignore (Hooks.run_hooks PostToolUse ~tool_name
+        ~input:(`Assoc [("output", `String result.output); ("is_error", `Bool result.is_error)]) ());
 
       Message.ToolResult {
         tool_use_id;

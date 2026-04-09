@@ -19,6 +19,10 @@ let run_query_fn : (config:Config.t -> messages:Message.message list -> auto_app
 
 let set_run_query fn = run_query_fn := fn
 
+(** Config ref — set at startup so subagents inherit the active config. *)
+let config_ref : Config.t option ref = ref None
+let set_config c = config_ref := Some c
+
 let input_schema = `Assoc [
   ("type", `String "object");
   ("properties", `Assoc [
@@ -34,7 +38,7 @@ let execute ~input ~cwd =
   Printf.printf "\027[2m[Spawning agent: %s]\027[0m\n" desc;
   flush stdout;
 
-  let config = Config.create () in
+  let config = match !config_ref with Some c -> c | None -> Config.create () in
   let ct = Cost_tracker.create ~model:config.model in
   let system_prompt = Printf.sprintf
     "You are a research subagent. Use Read, Grep, and Glob tools to investigate. Working directory: %s"

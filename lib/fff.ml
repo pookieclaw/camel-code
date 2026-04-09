@@ -22,7 +22,16 @@ let init ~base_path =
 (** Resolve a path to a canonical absolute path using realpath. *)
 let realpath p =
   try
-    let ic = Unix.open_process_in (Printf.sprintf "realpath -m %s 2>/dev/null" (Filename.quote p)) in
+    (* Use grealpath -m on macOS (from coreutils), fall back to realpath -m, then Python *)
+    let cmd =
+      if Sys.command "command -v grealpath >/dev/null 2>&1" = 0 then
+        Printf.sprintf "grealpath -m %s 2>/dev/null" (Filename.quote p)
+      else if Sys.command "realpath -m / >/dev/null 2>&1" = 0 then
+        Printf.sprintf "realpath -m %s 2>/dev/null" (Filename.quote p)
+      else
+        Printf.sprintf "python3 -c \"import os; print(os.path.abspath('%s'))\" 2>/dev/null"
+          (String.concat "\\'" (String.split_on_char '\'' p)) in
+    let ic = Unix.open_process_in cmd in
     let result = try Some (String.trim (input_line ic)) with End_of_file -> None in
     ignore (Unix.close_process_in ic);
     result

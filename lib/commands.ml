@@ -290,7 +290,7 @@ let cmd_commit = {
       let status = shell "git status --short 2>/dev/null" in
       ShowMessage (Printf.sprintf "Staged changes:\n%s\n\nUsage: /commit <message>" status)
     end else begin
-      let output = shell (Printf.sprintf "git add -A && git commit -m %s 2>&1" (Filename.quote msg)) in
+      let output = shell (Printf.sprintf "git commit -m %s 2>&1" (Filename.quote msg)) in
       ShowMessage output
     end
 }

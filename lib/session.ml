@@ -51,21 +51,39 @@ let git_branch () =
   ignore (Unix.close_process_in ic);
   branch
 
-(** Save a session to disk. *)
+(** Save a session to disk. Preserves original started_at on subsequent saves. *)
 let save ~id ~model ~messages ?(label = None) () =
   let dir = session_dir () in
   ensure_dir dir;
   let path = Filename.concat dir (id ^ ".json") in
   let msgs_json = List.map Message.message_to_json messages in
-  let now_cmd = "date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown" in
-  let ic = Unix.open_process_in now_cmd in
-  let now = try String.trim (input_line ic) with _ -> "unknown" in
-  ignore (Unix.close_process_in ic);
+  (* Preserve original started_at if file exists *)
+  let started_at =
+    if Sys.file_exists path then begin
+      try
+        let ic = open_in path in
+        let n = in_channel_length ic in
+        let content = really_input_string ic n in
+        close_in ic;
+        let json = Yojson.Safe.from_string content in
+        (match Yojson.Safe.Util.member "started_at" json with
+         | `String s -> s
+         | _ -> raise Not_found)
+      with _ ->
+        let ic = Unix.open_process_in "date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown" in
+        let now = try String.trim (input_line ic) with _ -> "unknown" in
+        ignore (Unix.close_process_in ic); now
+    end else begin
+      let ic = Unix.open_process_in "date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown" in
+      let now = try String.trim (input_line ic) with _ -> "unknown" in
+      ignore (Unix.close_process_in ic); now
+    end
+  in
   let base = [
     ("id", `String id);
     ("model", `String model);
     ("cwd", `String (Sys.getcwd ()));
-    ("started_at", `String now);
+    ("started_at", `String started_at);
     ("messages", `List msgs_json);
   ] in
   let base = match git_repo () with
@@ -137,7 +155,7 @@ let list_sessions () =
   if not (Sys.file_exists dir) then []
   else begin
     let files = Sys.readdir dir |> Array.to_list in
-    List.filter_map (fun f ->
+    let sessions = List.filter_map (fun f ->
       if Filename.check_suffix f ".json" then begin
         let id = Filename.chop_suffix f ".json" in
         let path = Filename.concat dir f in
@@ -161,5 +179,7 @@ let list_sessions () =
           }
         with _ -> None
       end else None
-    ) files
+    ) files in
+    (* Sort by started_at descending so most recent is first *)
+    List.sort (fun a b -> String.compare b.started_at a.started_at) sessions
   end

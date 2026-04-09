@@ -59,18 +59,29 @@ let () =
       Printf.eprintf "\027[33mWarning:\027[0m fff init failed: %s\n" msg
   end;
 
-  (* Try to create config — give a friendly error if no API key *)
+  (* Initialize MCP servers and register tools *)
+  let mcp_mgr = Mcp_manager.create_lazy () in
+  let mcp_tools = Mcp_manager.get_tools_lazy mcp_mgr in
+  if mcp_tools <> [] then
+    Tool_registry.register_mcp_tools mcp_tools;
+
+  (* Load settings and merge with CLI args (CLI takes precedence) *)
+  let settings = Settings.load () in
   let config =
     try Config.create
       ?api_key:args.api_key
-      ?model:args.model
-      ?max_tokens:args.max_tokens
+      ?model:(match args.model with Some _ -> args.model | None -> settings.model)
+      ?max_tokens:(match args.max_tokens with Some _ -> args.max_tokens | None -> settings.max_tokens)
       ()
     with Failure msg ->
       Printf.eprintf "\027[31mError:\027[0m %s\n" msg;
       Printf.eprintf "Run `camel doctor` to diagnose.\n";
       exit 1
   in
+  let auto_approve_final = args.yes || settings.auto_approve in
+
+  (* Wire agent config so subagents inherit CLI-provided settings *)
+  Tool_agent.set_config config;
 
   (* Check for session resume *)
   let initial_messages = match args.resume with
@@ -106,12 +117,12 @@ let () =
   | Some "__doctor_fix__" ->
     Doctor.run_fix ()
   | Some "__daemon__" ->
-    Daemon.start ~config ~auto_approve:args.yes ()
+    Daemon.start ~config ~auto_approve:auto_approve_final ()
   | Some "__login__" ->
     (match Oauth.login () with
      | Some _ -> Printf.printf "Login successful!\n"
      | None -> Printf.printf "Login failed.\n"; exit 1)
   | Some prompt ->
-    Repl.run_single ~config ~prompt ~auto_approve:args.yes
+    Repl.run_single ~config ~prompt ~auto_approve:auto_approve_final
   | None ->
-    Repl.run ~config ~auto_approve:args.yes ~initial_messages ()
+    Repl.run ~config ~auto_approve:auto_approve_final ~initial_messages ()

@@ -168,11 +168,20 @@ let run ~(config : Config.t) ~messages ~auto_approve ~cost_tracker ?system_promp
     Printf.printf "\n";
     flush stdout;
 
-    (* Pre-query hooks *)
+    (* Pre-query hooks — abort if any hook returns continue=false *)
     let msg_count = List.length !msgs in
     let cur = !active_config in
-    let _pre_results = Hooks.run_hooks PreQuery
+    let pre_results = Hooks.run_hooks PreQuery
       ~input:(`Assoc [("message_count", `Int msg_count); ("model", `String cur.Config.model)]) () in
+    let blocked = List.find_opt (fun (r : Hooks.hook_result) -> not r.continue) pre_results in
+    if blocked <> None then begin
+      let reason = match blocked with
+        | Some r -> String.trim r.output
+        | None -> "blocked by hook" in
+      let err_msg = Message.{ role = Assistant; content = [Text (Printf.sprintf "[Blocked by PreQuery hook: %s]" reason)] } in
+      msgs := !msgs @ [err_msg];
+      !msgs
+    end else
 
     (* Accumulate full response for markdown rendering *)
     let response_buf = Buffer.create 1024 in
@@ -213,14 +222,18 @@ let run ~(config : Config.t) ~messages ~auto_approve ~cost_tracker ?system_promp
     flush stdout;
     Cost_tracker.add_turn cost_tracker usage;
 
-    (* Post-query hooks *)
+    (* Post-query hooks — run and log failures *)
     let cur_cfg = !active_config in
-    let _post_results = Hooks.run_hooks PostQuery
+    let post_results = Hooks.run_hooks PostQuery
       ~input:(`Assoc [
         ("input_tokens", `Int usage.input_tokens);
         ("output_tokens", `Int usage.output_tokens);
         ("model", `String cur_cfg.Config.model);
       ]) () in
+    List.iter (fun (r : Hooks.hook_result) ->
+      if not r.continue then
+        Printf.eprintf "%s PostQuery hook failed: %s\n" (yellow "Warning:") (String.trim r.output)
+    ) post_results;
 
     (* Per-turn cost *)
     let turn_cost =

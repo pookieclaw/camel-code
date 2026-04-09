@@ -26,8 +26,16 @@ let execute ~input ~cwd:_ =
   in
   let tmp_out = Filename.temp_file "camel_bash" ".out" in
   let tmp_err = Filename.temp_file "camel_bash" ".err" in
-  let full_cmd = Printf.sprintf "timeout %.0f bash -c %s >%s 2>%s"
-    timeout_s (Filename.quote command) tmp_out tmp_err in
+  (* Use gtimeout on macOS (from coreutils), fall back to timeout on Linux *)
+  let timeout_bin =
+    if Sys.command "command -v gtimeout >/dev/null 2>&1" = 0 then "gtimeout"
+    else if Sys.command "command -v timeout >/dev/null 2>&1" = 0 then "timeout"
+    else "" in
+  let full_cmd = if timeout_bin = "" then
+    Printf.sprintf "bash -c %s >%s 2>%s" (Filename.quote command) tmp_out tmp_err
+  else
+    Printf.sprintf "%s %.0f bash -c %s >%s 2>%s"
+      timeout_bin timeout_s (Filename.quote command) tmp_out tmp_err in
   let exit_code = Sys.command full_cmd in
   let read_file f =
     if Sys.file_exists f then begin
