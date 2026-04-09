@@ -133,10 +133,11 @@ let store mem ~content ?(tags = []) ?(confidence = 1.0) () =
   ) mem.entries in
   match found with
   | Some existing ->
-    (* Merge: update content, boost confidence *)
+    (* Merge: update content, recompute embedding, boost confidence *)
     let updated = {
       existing with
       content;
+      embedding = emb;
       confidence = min 1.0 (existing.confidence +. 0.1);
       last_accessed = now;
       access_count = existing.access_count + 1;
@@ -180,8 +181,8 @@ let recall mem ~query ~top_k ?(min_confidence = default_min_confidence) () =
       { e with last_accessed = now; access_count = e.access_count + 1 }
     else e
   ) mem.entries in
-  let _mem = { mem with entries = updated_entries } in
-  List.map snd top
+  let updated_mem = { mem with entries = updated_entries } in
+  (updated_mem, List.map snd top)
 
 let compact mem =
   let now = Unix.gettimeofday () in

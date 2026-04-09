@@ -208,7 +208,8 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          let user_msg = Message.{ role = User; content = [Text input_clean] } in
          msgs := !msgs @ [user_msg];
          (* Recall relevant memories for this turn *)
-         let recalled = Semantic_memory.recall !mem ~query:input_clean ~top_k:3 () in
+         let (updated_mem, recalled) = Semantic_memory.recall !mem ~query:input_clean ~top_k:3 () in
+         mem := updated_mem;
          let memories_str = match recalled with
            | [] -> ""
            | entries -> String.concat "\n" (List.map Semantic_memory.entry_to_string entries)

@@ -810,7 +810,7 @@ let test_store_and_recall () =
   let mem = Semantic_memory.empty_store in
   let mem = Semantic_memory.store mem ~content:"OCaml is a functional language" () in
   let mem = Semantic_memory.store mem ~content:"Python is popular for data science" () in
-  let results = Semantic_memory.recall mem ~query:"functional programming" ~top_k:1 () in
+  let (_mem, results) = Semantic_memory.recall mem ~query:"functional programming" ~top_k:1 () in
   Alcotest.(check int) "one result" 1 (List.length results);
   Alcotest.(check bool) "relevant" true
     (String.length (List.hd results).content > 0)

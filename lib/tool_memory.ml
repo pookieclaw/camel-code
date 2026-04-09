@@ -21,7 +21,7 @@ module Read : S = struct
     let query = get_string_exn "query" input in
     let top_k = Option.value (get_int "top_k" input) ~default:5 in
     let mem = Semantic_memory.load () in
-    let results = Semantic_memory.recall mem ~query ~top_k () in
+    let (_mem, results) = Semantic_memory.recall mem ~query ~top_k () in
     if results = [] then
       { output = "No relevant memories found."; is_error = false }
     else begin
