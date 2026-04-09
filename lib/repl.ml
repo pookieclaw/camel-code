@@ -143,7 +143,8 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
   let ct = Cost_tracker.create ~model:config.model in
   let session_id = Session.generate_id () in
   let tools = Tool_registry.tool_names () in
-  let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
+  let mem = ref (Semantic_memory.load ()) in
+  let _base_prompt = System_prompt.build ~model:config.model ~tools () in
   let msgs = ref initial_messages in
   let input_state = Input.create () in
   let cmd_names = List.map (fun (c : Commands.command) -> c.name) Commands.all_commands in
@@ -206,7 +207,22 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          echo_input ~tw input_clean;
          let user_msg = Message.{ role = User; content = [Text input_clean] } in
          msgs := !msgs @ [user_msg];
-         msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
+         (* Recall relevant memories for this turn *)
+         let recalled = Semantic_memory.recall !mem ~query:input_clean ~top_k:3 () in
+         let memories_str = match recalled with
+           | [] -> ""
+           | entries -> String.concat "\n" (List.map Semantic_memory.entry_to_string entries)
+         in
+         let turn_prompt = Some (System_prompt.build ~model:config.model ~tools ~memories:memories_str ()) in
+         msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt:turn_prompt ();
+         (* Auto-store user+assistant turn *)
+         (match List.rev !msgs with
+          | last :: _ when last.Message.role = Message.Assistant ->
+            let response_text = Message.message_text last in
+            let turn_text = Printf.sprintf "User: %s\nAssistant: %s" input_clean response_text in
+            mem := Semantic_memory.store !mem ~content:turn_text ();
+            Semantic_memory.save !mem
+          | _ -> ());
          Printf.printf "\n";
          thin_line ~w:(min 60 tw);
          Printf.printf "\n";
@@ -221,7 +237,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
 let run_single ~config ~prompt ~auto_approve =
   let ct = Cost_tracker.create ~model:config.Config.model in
   let tools = Tool_registry.tool_names () in
-  let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
+  let system_prompt = Some (System_prompt.build ~model:config.model ~tools ()) in
   let msgs = [Message.{ role = User; content = [Text prompt] }] in
 
   at_exit reset_terminal;

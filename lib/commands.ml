@@ -214,10 +214,14 @@ let cmd_resume = {
 
 let cmd_compact = {
   name = "compact";
-  description = "Compact conversation history";
-  execute = fun ~args:_ ~messages ~cost_tracker:_ ->
-    let n = List.length messages in
-    ShowMessage (Printf.sprintf "Conversation has %d messages. Compaction not yet implemented — use /clear to start fresh." n)
+  description = "Compact conversation history and memory";
+  execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
+    let mem = Semantic_memory.load () in
+    let before = List.length mem.entries in
+    let mem = Semantic_memory.compact mem in
+    let after = List.length mem.entries in
+    Semantic_memory.save mem;
+    ShowMessage (Printf.sprintf "Compacted memory: %d → %d entries" before after)
 }
 
 let cmd_export = {
@@ -242,17 +246,26 @@ let cmd_export = {
 
 let cmd_memory = {
   name = "memory";
-  description = "Show memory files";
+  description = "Show semantic memory status";
   execute = fun ~args:_ ~messages:_ ~cost_tracker:_ ->
-    let home = match Sys.getenv_opt "HOME" with Some h -> h | None -> "." in
-    let mem_dir = Filename.concat (Filename.concat home ".camel") "memory" in
-    if Sys.file_exists mem_dir then begin
-      let files = Sys.readdir mem_dir |> Array.to_list |> List.sort String.compare in
-      if files = [] then ShowMessage "No memory files."
-      else ShowMessage ("Memory files (~/.camel/memory/):\n" ^
-        String.concat "\n" (List.map (fun f -> "  " ^ f) files))
-    end else
-      ShowMessage "No memory directory (~/.camel/memory/)"
+    let mem = Semantic_memory.load () in
+    let n = List.length mem.entries in
+    if n = 0 then
+      ShowMessage "Semantic memory: empty\n\nMemories are automatically stored from conversations."
+    else begin
+      let avg_conf = List.fold_left (fun acc (e : Semantic_memory.memory_entry) ->
+        acc +. e.confidence) 0.0 mem.entries /. float_of_int n in
+      let recent = List.filteri (fun i _ -> i >= n - 3) mem.entries in
+      let recent_lines = List.map (fun (e : Semantic_memory.memory_entry) ->
+        let preview = if String.length e.content > 60
+          then String.sub e.content 0 57 ^ "..."
+          else e.content in
+        Printf.sprintf "  %.2f  %s" e.confidence preview
+      ) recent in
+      ShowMessage (Printf.sprintf
+        "Semantic memory: %d entries (avg confidence: %.2f)\n\nRecent:\n%s\n\nUse /compact to clean up old memories."
+        n avg_conf (String.concat "\n" recent_lines))
+    end
 }
 
 (* ── Git ───────────────────────────────────────────────────────── *)

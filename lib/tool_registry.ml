@@ -18,6 +18,8 @@ let all_tools : packed list = [
   (module Tool_task.Create : S);
   (module Tool_task.List_ : S);
   (module Tool_task.Update : S);
+  (module Tool_memory.Read : S);
+  (module Tool_memory.Store : S);
 ]
 
 (** Append dynamically discovered tools (e.g., MCP). *)

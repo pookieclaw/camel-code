@@ -15,7 +15,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
     let ct = Cost_tracker.create ~model:config.model in
     let session_id = Session.generate_id () in
     let tools = Tool_registry.tool_names () in
-    let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
+    let system_prompt = Some (System_prompt.build ~model:config.model ~tools ()) in
     let msgs = ref initial_messages in
 
     let old_termios = Tui_ansi.enable_raw_mode () in

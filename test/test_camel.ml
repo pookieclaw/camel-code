@@ -784,6 +784,56 @@ let test_daemon_query_missing_prompt () =
   Alcotest.(check string) "missing prompt error" "missing prompt"
     (response |> member "error" |> to_string)
 
+(* === Semantic memory tests === *)
+let test_fnv1a_hash () =
+  let h = Semantic_memory.fnv1a_hash "hello" in
+  Alcotest.(check bool) "deterministic" true (h = Semantic_memory.fnv1a_hash "hello");
+  Alcotest.(check bool) "different" true (h <> Semantic_memory.fnv1a_hash "world")
+
+let test_embed_deterministic () =
+  let e1 = Semantic_memory.embed "test query" in
+  let e2 = Semantic_memory.embed "test query" in
+  Alcotest.(check bool) "same" true (e1 = e2)
+
+let test_cosine_self () =
+  let e = Semantic_memory.embed "hello world" in
+  let sim = Semantic_memory.cosine_similarity e e in
+  Alcotest.(check bool) "self-sim ~1.0" true (sim > 0.99)
+
+let test_cosine_different () =
+  let e1 = Semantic_memory.embed "functional programming ocaml" in
+  let e2 = Semantic_memory.embed "cooking recipes pasta" in
+  let sim = Semantic_memory.cosine_similarity e1 e2 in
+  Alcotest.(check bool) "low sim" true (sim < 0.5)
+
+let test_store_and_recall () =
+  let mem = Semantic_memory.empty_store in
+  let mem = Semantic_memory.store mem ~content:"OCaml is a functional language" () in
+  let mem = Semantic_memory.store mem ~content:"Python is popular for data science" () in
+  let results = Semantic_memory.recall mem ~query:"functional programming" ~top_k:1 () in
+  Alcotest.(check int) "one result" 1 (List.length results);
+  Alcotest.(check bool) "relevant" true
+    (String.length (List.hd results).content > 0)
+
+let test_dedup () =
+  let mem = Semantic_memory.empty_store in
+  let mem = Semantic_memory.store mem ~content:"OCaml has pattern matching" () in
+  let mem = Semantic_memory.store mem ~content:"OCaml has pattern matching" () in
+  Alcotest.(check int) "deduped" 1 (List.length mem.entries)
+
+let test_compact () =
+  let mem = Semantic_memory.empty_store in
+  let mem = Semantic_memory.store mem ~content:"test" ~confidence:0.01 () in
+  let mem = Semantic_memory.compact mem in
+  Alcotest.(check int) "removed" 0 (List.length mem.entries)
+
+let test_memory_json_roundtrip () =
+  let mem = Semantic_memory.empty_store in
+  let mem = Semantic_memory.store mem ~content:"test memory" () in
+  let json = Semantic_memory.to_json mem in
+  let mem2 = Semantic_memory.of_json json in
+  Alcotest.(check int) "same count" (List.length mem.entries) (List.length mem2.entries)
+
 let () =
   Alcotest.run "camel" [
     "basics", [
@@ -910,5 +960,15 @@ let () =
       Alcotest.test_case "shutdown" `Quick test_daemon_shutdown_command;
       Alcotest.test_case "unknown_method" `Quick test_daemon_unknown_method;
       Alcotest.test_case "missing_prompt" `Quick test_daemon_query_missing_prompt;
+    ];
+    "semantic_memory", [
+      Alcotest.test_case "fnv1a_hash" `Quick test_fnv1a_hash;
+      Alcotest.test_case "embed_deterministic" `Quick test_embed_deterministic;
+      Alcotest.test_case "cosine_self" `Quick test_cosine_self;
+      Alcotest.test_case "cosine_different" `Quick test_cosine_different;
+      Alcotest.test_case "store_and_recall" `Quick test_store_and_recall;
+      Alcotest.test_case "dedup" `Quick test_dedup;
+      Alcotest.test_case "compact" `Quick test_compact;
+      Alcotest.test_case "json_roundtrip" `Quick test_memory_json_roundtrip;
     ];
   ]

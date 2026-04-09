@@ -40,7 +40,7 @@ let handle_command ~config ~auto_approve json =
     else begin
       let ct = Cost_tracker.create ~model:config.Config.model in
       let tools = Tool_registry.tool_names () in
-      let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
+      let system_prompt = Some (System_prompt.build ~model:config.model ~tools ()) in
       let msgs = [Message.{ role = User; content = [Text prompt] }] in
       let final_msgs =
         try Query.run ~config ~messages:msgs ~auto_approve ~cost_tracker:ct ?system_prompt ()

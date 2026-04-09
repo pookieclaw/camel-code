@@ -26,7 +26,7 @@ let os_info () =
   os
 
 (** Build the full system prompt. *)
-let build ~model ~tools =
+let build ~model ~tools ?(memories = "") () =
   let parts = ref [] in
   let add s = parts := s :: !parts in
 
@@ -54,5 +54,11 @@ let build ~model ~tools =
      add "\n# User Instructions (from CLAUDE.md)\n";
      add content
    | None -> ());
+
+  (* Recalled memories *)
+  if String.length memories > 0 then begin
+    add "\n# Recalled Memories\nThe following are relevant memories from previous sessions:\n";
+    add memories
+  end;
 
   String.concat "\n" (List.rev !parts)

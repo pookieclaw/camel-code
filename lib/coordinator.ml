@@ -46,7 +46,7 @@ let assign_task t ~worker_id ~task =
     let config = Config.create () in
     let ct = Cost_tracker.create ~model:config.model in
     let tools = Tool_registry.tool_names () in
-    let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
+    let system_prompt = Some (System_prompt.build ~model:config.model ~tools ()) in
     let final = Query.run ~config ~messages:worker.messages
       ~auto_approve:true ~cost_tracker:ct ?system_prompt () in
     worker.messages <- final;
