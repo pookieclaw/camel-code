@@ -13,6 +13,7 @@ type t = {
   mutable saved_input : string;
   mutable completions : string list;  (** Available slash commands *)
   mutable hint_lines : int;           (** Number of hint lines currently shown *)
+  mutable last_rows : int;            (** Terminal rows the last redraw occupied *)
 }
 
 let create () = {
@@ -23,7 +24,19 @@ let create () = {
   saved_input = "";
   completions = [];
   hint_lines = 0;
+  last_rows = 1;
 }
+
+(** Terminal width in columns, falling back to 80 if it can't be determined. *)
+let terminal_width () =
+  try
+    let ic = Unix.open_process_in "stty size 2>/dev/null" in
+    let line = input_line ic in
+    ignore (Unix.close_process_in ic);
+    match String.split_on_char ' ' (String.trim line) with
+    | [_rows; cols] -> max 1 (int_of_string cols)
+    | _ -> 80
+  with _ -> 80
 
 let set_completions t cmds = t.completions <- cmds
 
@@ -81,7 +94,14 @@ let redraw t ~prompt =
       else ""
     | None -> ""
   in
-  Printf.printf "\r\027[K%s%s%s" prompt text ghost;
+  (* Return to the top-left of whatever the last redraw occupied, then erase
+     everything from there to the end of the screen. \r + \027[K alone only
+     handle a single terminal row -- once the line is long enough to soft-wrap
+     onto more than one row, that leaves stale wrapped rows behind on every
+     redraw, which is what caused the runaway duplicate-line bug. *)
+  if t.last_rows > 1 then
+    Printf.printf "\027[%dA" (t.last_rows - 1);
+  Printf.printf "\r\027[J%s%s%s" prompt text ghost;
   (* Move cursor back to actual position (past ghost) *)
   let ghost_display_len = String.length (match top_completion t with
     | Some cmd -> let f = "/" ^ cmd in
@@ -93,6 +113,9 @@ let redraw t ~prompt =
   let total_back = (Buffer.length t.buf - t.cursor) + ghost_display_len in
   if total_back > 0 then
     Printf.printf "\027[%dD" total_back;
+  let width = terminal_width () in
+  let visible_len = String.length prompt + String.length text + ghost_display_len in
+  t.last_rows <- max 1 ((visible_len + width - 1) / width);
   flush stdout
 
 let insert_char t c =
@@ -164,6 +187,7 @@ let read_line t ~prompt =
   t.cursor <- 0;
   t.history_pos <- 0;
   t.hint_lines <- 0;
+  t.last_rows <- 1;
   Printf.printf "%s" prompt;
   flush stdout;
 
@@ -196,8 +220,12 @@ let read_line t ~prompt =
       show_hints t
 
     | 10 | 13 (* Enter *) ->
-      (* Clear the line completely before submitting — removes ghost text *)
-      Printf.printf "\r\027[K";
+      (* Clear the line completely before submitting — removes ghost text.
+         Must unwind to the top row first, same as redraw, or a wrapped
+         line leaves stale rows behind above the submitted output. *)
+      if t.last_rows > 1 then
+        Printf.printf "\027[%dA" (t.last_rows - 1);
+      Printf.printf "\r\027[J";
       flush stdout;
       let text = String.trim (Buffer.contents t.buf) in
       let raw = Buffer.contents t.buf in
