@@ -5,6 +5,8 @@ type t = {
   model : string option;
   api_key : string option;
   max_tokens : int option;
+  provider : string option;
+  base_url : string option;
   yes : bool;
   verbose : bool;
   version : bool;
@@ -16,7 +18,8 @@ type t = {
 let parse argv =
   let r = ref {
     prompt = None; model = None; api_key = None;
-    max_tokens = None; yes = false; verbose = false; version = false;
+    max_tokens = None; provider = None; base_url = None;
+    yes = false; verbose = false; version = false;
     resume = None; continue_last = false; help = false;
   } in
   let i = ref 1 in
@@ -27,8 +30,10 @@ let parse argv =
     (match a with
      | "-p" | "--prompt" -> r := { !r with prompt = Some (next ()) }
      | "-m" | "--model" -> r := { !r with model = Some (next ()) }
-     | "--api-key" -> r := { !r with api_key = Some (next ()) }
-     | "--max-tokens" -> r := { !r with max_tokens = Some (int_of_string (next ())) }
+      | "--api-key" -> r := { !r with api_key = Some (next ()) }
+      | "--max-tokens" -> r := { !r with max_tokens = Some (int_of_string (next ())) }
+      | "--provider" -> r := { !r with provider = Some (next ()) }
+      | "--base-url" -> r := { !r with base_url = Some (next ()) }
      | "-y" | "--yes" -> r := { !r with yes = true }
      | "-v" | "--verbose" -> r := { !r with verbose = true }
      | "--version" -> r := { !r with version = true }

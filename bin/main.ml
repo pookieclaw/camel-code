@@ -9,8 +9,10 @@ let print_help () =
   Printf.printf "  -y, --yes             Auto-approve all tool execution\n";
   Printf.printf "  -c, --continue        Resume most recent session\n";
   Printf.printf "      --resume <id>     Resume a specific session\n";
-  Printf.printf "      --api-key <key>   API key (or set ANTHROPIC_API_KEY)\n";
-  Printf.printf "      --max-tokens <n>  Max output tokens\n";
+   Printf.printf "      --api-key <key>   API key (or set ANTHROPIC_API_KEY)\n";
+   Printf.printf "      --max-tokens <n>  Max output tokens\n";
+   Printf.printf "      --provider <p>    Provider: anthropic (default) | ollama/openai\n";
+   Printf.printf "      --base-url <url>  API base URL (required for non-Anthropic providers)\n";
   Printf.printf "  -v, --verbose         Verbose output\n";
   Printf.printf "      --version         Show version\n";
   Printf.printf "  -h, --help            Show this help\n";
@@ -59,12 +61,26 @@ let () =
       Printf.eprintf "\027[33mWarning:\027[0m fff init failed: %s\n" msg
   end;
 
+  (* Map the --provider string to a Config.provider *)
+  let provider_cfg = match args.provider with
+    | Some s ->
+      (match String.lowercase_ascii s with
+       | "anthropic" -> Some Config.Anthropic
+       | "ollama" | "openai" | "openai-compatible" | "openai_compatible"
+       | "llama.cpp" | "llamacpp" | "llama" -> Some Config.OpenAI
+       | _ -> failwith (Printf.sprintf
+          "Unknown provider '%s' (expected: anthropic | ollama/openai)" s))
+    | None -> None
+  in
+
   (* Try to create config — give a friendly error if no API key *)
   let config =
     try Config.create
       ?api_key:args.api_key
       ?model:args.model
       ?max_tokens:args.max_tokens
+      ?base_url:args.base_url
+      ?provider:provider_cfg
       ()
     with Failure msg ->
       Printf.eprintf "\027[31mError:\027[0m %s\n" msg;

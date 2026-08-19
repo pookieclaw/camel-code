@@ -372,6 +372,7 @@ let test_cache_stable_field_order () =
   let config = Config.{
     api_key = "test-key"; model = "test-model";
     max_tokens = 1024; base_url = "http://localhost";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let messages = [Message.{ role = User; content = [Text "hello"] }] in
@@ -392,6 +393,7 @@ let test_cache_stable_field_order () =
 let test_cache_stable_deterministic () =
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let messages = [Message.{ role = User; content = [Text "test"] }] in
@@ -465,6 +467,7 @@ let test_agent_fn_ref_default_fails () =
     failwith "not wired");
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let ct = Cost_tracker.create ~model:"m" in
@@ -484,6 +487,7 @@ let test_agent_set_run_query () =
   Tool_agent.set_run_query fake_run;
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let ct = Cost_tracker.create ~model:"m" in
@@ -605,6 +609,7 @@ let test_args_daemon () =
 let test_config_fallback_none () =
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   Alcotest.(check bool) "no fallback" true (Config.to_fallback config = None)
@@ -612,6 +617,7 @@ let test_config_fallback_none () =
 let test_config_fallback_model () =
   let config = Config.{
     api_key = "k"; model = "primary"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = Some "secondary"; fallback_api_key = None;
   } in
   match Config.to_fallback config with
@@ -624,6 +630,7 @@ let test_config_fallback_model () =
 let test_config_fallback_key () =
   let config = Config.{
     api_key = "primary-key"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = Some "backup-key";
   } in
   match Config.to_fallback config with
@@ -635,6 +642,7 @@ let test_config_fallback_key () =
 let test_config_fallback_both () =
   let config = Config.{
     api_key = "k1"; model = "m1"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = Some "m2"; fallback_api_key = Some "k2";
   } in
   match Config.to_fallback config with
@@ -743,6 +751,7 @@ let test_lazy_mcp_no_servers () =
 let test_daemon_status_command () =
   let config = Config.{
     api_key = "k"; model = "test-model"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "status")] in
@@ -755,6 +764,7 @@ let test_daemon_status_command () =
 let test_daemon_shutdown_command () =
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "shutdown")] in
@@ -764,6 +774,7 @@ let test_daemon_shutdown_command () =
 let test_daemon_unknown_method () =
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "bogus")] in
@@ -776,6 +787,7 @@ let test_daemon_unknown_method () =
 let test_daemon_query_missing_prompt () =
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
+    provider = Anthropic;
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "query"); ("params", `Assoc [])] in
@@ -783,6 +795,359 @@ let test_daemon_query_missing_prompt () =
   let open Yojson.Safe.Util in
   Alcotest.(check string) "missing prompt error" "missing prompt"
     (response |> member "error" |> to_string)
+
+(* === Args: provider / base-url === *)
+
+let test_args_provider () =
+  let args =
+    Args.parse [|"camel"; "--provider"; "ollama"; "--base-url"; "http://localhost:8090/v1"|]
+  in
+  Alcotest.(check (option string)) "provider" (Some "ollama") args.provider;
+  Alcotest.(check (option string)) "base_url"
+    (Some "http://localhost:8090/v1") args.base_url
+
+(* === Streaming_openai: chunk parsing and tool-call accumulation === *)
+
+(** Build an OpenAI streaming chunk JSON (delta/finish/usage optional;
+    sentinels: `Null delta/usage, "" finish). *)
+let oa_chunk ?(delta = `Null) ?(finish = "") ?(usage = `Null) () =
+  let choice = ref [] in
+  (match finish with
+   | "" -> ()
+   | f -> choice := ("finish_reason", `String f) :: !choice);
+  (match delta with
+   | `Null -> ()
+   | d -> choice := ("delta", d) :: !choice);
+  let pairs = ref [
+    ("id", `String "cmpl-1");
+    ("object", `String "chat.completion.chunk");
+  ] in
+  pairs := ("choices", `List [ `Assoc (List.rev !choice) ]) :: !pairs;
+  (match usage with
+   | `Null -> ()
+   | u -> pairs := ("usage", u) :: !pairs);
+  Yojson.Safe.to_string (`Assoc (List.rev !pairs))
+
+(** Build one entry of a delta's `tool_calls` array ("" omits the member). *)
+let oa_tc ?(id = "") ?(name = "") ?(args = "") ~index () =
+  let func = ref [] in
+  (match name with
+   | "" -> ()
+   | n -> func := ("name", `String n) :: !func);
+  (match args with
+   | "" -> ()
+   | a -> func := ("arguments", `String a) :: !func);
+  let pairs = ref [] in
+  (match id with
+   | "" -> ()
+   | i -> pairs := ("id", `String i) :: !pairs);
+  pairs := ("index", `Int index) :: !pairs;
+  pairs := ("type", `String "function") :: !pairs;
+  pairs := ("function", `Assoc (List.rev !func)) :: !pairs;
+  `Assoc (List.rev !pairs)
+
+let oa_text frag =
+  oa_chunk ~delta:(`Assoc [("content", `String frag)]) ()
+
+let oa_tc_delta entries =
+  oa_chunk ~delta:(`Assoc [("tool_calls", `List entries)]) ()
+
+let test_oai_text_accumulation () =
+  let acc = Streaming_openai.create_accumulator () in
+  ignore (Streaming_openai.apply_data acc (oa_text "Hel"));
+  ignore (Streaming_openai.apply_data acc (oa_text "lo"));
+  let (msg, _stop, _usage) = Streaming_openai.finalize acc in
+  Alcotest.(check string) "accumulated text" "Hello" (Message.message_text msg)
+
+let test_oai_single_tool_call () =
+  let acc = Streaming_openai.create_accumulator () in
+  (* id/name arrive only on the first chunk; arguments split across chunks *)
+  ignore (Streaming_openai.apply_data acc
+    (oa_tc_delta [oa_tc ~id:"call_abc" ~name:"Bash" ~args:"{\"comma" ~index:0 ()]));
+  ignore (Streaming_openai.apply_data acc
+    (oa_tc_delta [oa_tc ~args:"nd\":\"ls\"}" ~index:0 ()]));
+  let (msg, _stop, _usage) = Streaming_openai.finalize acc in
+  (match msg.content with
+   | [Message.ToolUse { id = "call_abc"; name = "Bash"; input }] ->
+     let cmd =
+       match input with
+       | `Assoc pairs ->
+         (match List.assoc_opt "command" pairs with
+          | Some (`String s) -> Some s
+          | _ -> None)
+       | _ -> None
+     in
+     Alcotest.(check (option string)) "assembled argument" (Some "ls") cmd
+   | _ -> Alcotest.fail "expected a single ToolUse block")
+
+(** Two tool calls in one turn, interleaved across chunks by index —
+    catches index-mixup bugs in the accumulator. *)
+let test_oai_two_tool_calls_interleaved () =
+  let acc = Streaming_openai.create_accumulator () in
+  (* Chunk 1: both calls open, first argument fragment each *)
+  ignore (Streaming_openai.apply_data acc
+    (oa_tc_delta [
+      oa_tc ~id:"call_a" ~name:"Read" ~args:"{\"file_path\"" ~index:0 ();
+      oa_tc ~id:"call_b" ~name:"Grep" ~args:"{\"pattern\"" ~index:1 ();
+    ]));
+  (* Chunk 2: only call 0 continues (no closing brace yet) *)
+  ignore (Streaming_openai.apply_data acc
+    (oa_tc_delta [oa_tc ~args:":\"/tmp/f.txt\"" ~index:0 ()]));
+  (* Chunk 3: only call 1 continues *)
+  ignore (Streaming_openai.apply_data acc
+    (oa_tc_delta [oa_tc ~args:":\"bar\"}" ~index:1 ()]));
+  (* Chunk 4: final fragment for call 0 + finish reason *)
+  let delta4 = `Assoc [("tool_calls", `List [oa_tc ~args:"}" ~index:0 ()])] in
+  ignore (Streaming_openai.apply_data acc
+    (oa_chunk ~delta:delta4 ~finish:"tool_calls" ()));
+  let (msg, stop, _usage) = Streaming_openai.finalize acc in
+  Alcotest.(check bool) "finish mapped" true
+    (stop = Some Message.ToolUse_stop);
+  (match msg.content with
+   | a :: b :: [] ->
+     (match a, b with
+      | Message.ToolUse { id = "call_a"; name = "Read"; input = i0 },
+        Message.ToolUse { id = "call_b"; name = "Grep"; input = i1 }
+      ->
+        let get k = function
+          | `Assoc pairs ->
+            (match List.assoc_opt k pairs with Some (`String s) -> Some s | _ -> None)
+          | _ -> None
+        in
+        Alcotest.(check (option string)) "call_0 arg" (Some "/tmp/f.txt") (get "file_path" i0);
+        Alcotest.(check (option string)) "call_1 arg" (Some "bar") (get "pattern" i1)
+      | _ -> Alcotest.fail "unexpected content shape")
+   | _ -> Alcotest.fail "unexpected content shape")
+
+(** Finish reasons map inline; unknown values stay unmapped. *)
+let test_oai_finish_reasons () =
+  let finish_of reason =
+    let acc = Streaming_openai.create_accumulator () in
+    let d0 = `Assoc [] in
+    ignore (Streaming_openai.apply_data acc
+      (oa_chunk ~delta:d0 ~finish:reason ()));
+    match Streaming_openai.finalize acc with
+    | (_msg, stop, _u) -> stop
+  in
+  Alcotest.(check bool) "stop" true
+    (finish_of "stop" = Some Message.EndTurn);
+  Alcotest.(check bool) "tool_calls" true
+    (finish_of "tool_calls" = Some Message.ToolUse_stop);
+  Alcotest.(check bool) "length" true
+    (finish_of "length" = Some Message.MaxTokens);
+  Alcotest.(check bool) "unknown unmapped" true
+    (finish_of "whatever" = None)
+
+(** Usage typically arrives only on the final chunk; cache fields absent. *)
+let test_oai_usage_final_chunk () =
+  let acc = Streaming_openai.create_accumulator () in
+  ignore (Streaming_openai.apply_data acc (oa_text "x"));
+  let d0 = `Assoc [] in
+  let u0 = `Assoc [
+    ("prompt_tokens", `Int 123);
+    ("completion_tokens", `Int 45);
+  ] in
+  ignore (Streaming_openai.apply_data acc
+    (oa_chunk ~delta:d0 ~finish:"stop" ~usage:u0 ()));
+  let (_msg, _stop, u) = Streaming_openai.finalize acc in
+  Alcotest.(check int) "prompt" 123 u.input_tokens;
+  Alcotest.(check int) "completion" 45 u.output_tokens;
+  Alcotest.(check int) "cache_write" 0 u.cache_creation_input_tokens;
+  Alcotest.(check int) "cache_read" 0 u.cache_read_input_tokens
+
+let test_oai_done_sentinel () =
+  let acc = Streaming_openai.create_accumulator () in
+  let r = Streaming_openai.apply_data acc "[DONE]" in
+  Alcotest.(check bool) "done" true r.is_done;
+  Alcotest.(check bool) "no texts" true (List.length r.texts = 0)
+
+let test_oai_inband_error () =
+  let acc = Streaming_openai.create_accumulator () in
+  let r = Streaming_openai.apply_data acc
+    {|{"error":{"message":"model not found","type":"model_not_found","code":null}}|} in
+  Alcotest.(check bool) "not done" false r.is_done;
+  Alcotest.(check (option string)) "error" (Some "model not found") r.error
+
+(** A complete (non-streamed) completion should also be consumable. *)
+let test_oai_full_completion () =
+  let acc = Streaming_openai.create_accumulator () in
+  let r = Streaming_openai.apply_data acc
+    {|{"id":"c1","object":"chat.completion","choices":[{"index":0,
+      "message":{"role":"assistant","content":"hi there",
+      "tool_calls":[{"id":"call_z","type":"function",
+      "function":{"name":"Bash","arguments":"{\"command\":\"pwd\"}"}}]},
+      "finish_reason":"tool_calls"}],
+      "usage":{"prompt_tokens":5,"completion_tokens":7}}|} in
+  Alcotest.(check bool) "no error" true (r.error = None);
+  let (msg, stop, u) = Streaming_openai.finalize acc in
+  Alcotest.(check string) "text" "hi there"
+    (List.hd (List.filter_map (function Message.Text s -> Some s | _ -> None) msg.content));
+  Alcotest.(check bool) "stop" true (stop = Some Message.ToolUse_stop);
+  Alcotest.(check int) "prompt" 5 u.input_tokens
+
+(* === Query_openai: body shape and error checks === *)
+
+let oai_test_config () =
+  Config.{
+    api_key = "k"; model = "aria"; max_tokens = 100;
+    base_url = "http://localhost:8090/v1";
+    provider = Config.OpenAI;
+    fallback_model = None; fallback_api_key = None;
+  }
+
+let test_oai_endpoint_normalization () =
+  Alcotest.(check string) "with /v1 prefix"
+    "http://localhost:8090/v1/chat/completions"
+    (Query_openai.endpoint "http://localhost:8090/v1");
+  Alcotest.(check string) "without /v1 prefix"
+    "http://localhost:8090/v1/chat/completions"
+    (Query_openai.endpoint "http://localhost:8090")
+
+let test_oai_error_check () =
+  Alcotest.(check (option string)) "error detected" (Some "invalid_request_error: boom")
+    (Query_openai.check_api_error
+      {|{"error":{"message":"boom","type":"invalid_request_error","code":null}}|});
+  Alcotest.(check (option string)) "error without type" (Some "plain")
+    (Query_openai.check_api_error
+      {|{"error":{"message":"plain"}}|});
+  Alcotest.(check (option string)) "no error" None
+    (Query_openai.check_api_error
+      {|{"id":"c1","object":"chat.completion.chunk","choices":[]}|})
+
+(** System prompt becomes the first message; tools are function-wrapped. *)
+let test_oai_build_body_shape () =
+  let config = oai_test_config () in
+  let msgs = [Message.{ role = Message.User; content = [Message.Text "hi"] }] in
+  let body =
+    Query_openai.build_body ~config ~messages:msgs
+      ~system_prompt:(Some "be nice") ~tool_filter:None
+  in
+  let json = Yojson.Safe.from_string body in
+  let open Yojson.Safe.Util in
+  (match member "messages" json with
+   | `List (first :: _) ->
+     Alcotest.(check string) "system first" "system"
+       (first |> member "role" |> to_string)
+   | _ -> Alcotest.fail "expected a messages list");
+  let tools = member "tools" json in
+   (match tools with
+    | `List (t :: _) ->
+      (match t with
+       | `Assoc _ as entry ->
+         Alcotest.(check string) "tool type" "function"
+           (member "type" entry |> to_string);
+         let fn = member "function" entry in
+         Alcotest.(check bool) "has parameters schema" true
+           (match member "parameters" fn with `Null -> false | _ -> true)
+       | _ -> Alcotest.fail "malformed tool entry")
+    | _ -> Alcotest.fail "expected a tools list");
+  Alcotest.(check bool) "stream" true
+    (match member "stream" json with `Bool b -> b | _ -> false)
+
+(** tool_filter restricts which tools are wrapped. *)
+let test_oai_build_body_tool_filter () =
+  let config = oai_test_config () in
+  let body =
+    Query_openai.build_body ~config ~messages:[]
+      ~system_prompt:None ~tool_filter:(Some ["Read"])
+  in
+  let json = Yojson.Safe.from_string body in
+  let open Yojson.Safe.Util in
+  (match member "tools" json with
+   | `List entries ->
+     Alcotest.(check int) "one tool" 1 (List.length entries);
+      (match entries with
+       | [t] ->
+         let fn = t |> member "function" in
+         Alcotest.(check string) "name" "Read" (fn |> member "name" |> to_string)
+       | _ -> ())
+   | _ -> Alcotest.fail "expected tools list")
+
+(** Tool results expand into role:"tool" messages following the call. *)
+let test_oai_tool_result_expansion () =
+  let config = oai_test_config () in
+  let msgs = [
+    Message.{ role = Message.User; content = [Message.Text "go"] };
+    Message.{ role = Message.Assistant; content = [
+      Message.ToolUse {
+        id = "call_1";
+        name = "Bash";
+        input = `Assoc [("command", `String "ls")];
+      };
+    ] };
+    Message.{ role = Message.User; content = [
+      Message.ToolResult {
+        tool_use_id = "call_1";
+        content = "file.txt";
+        is_error = false;
+      };
+    ] };
+  ] in
+  let body =
+    Query_openai.build_body ~config ~messages:msgs
+      ~system_prompt:None ~tool_filter:None
+  in
+  let json = Yojson.Safe.from_string body in
+  let wire = Yojson.Safe.Util.(member "messages" json |> to_list) in
+  let roles =
+    List.map (fun m ->
+      m |> Yojson.Safe.Util.member "role" |> Yojson.Safe.Util.to_string
+    ) wire
+  in
+  Alcotest.(check (list string)) "roles" ["user"; "assistant"; "tool"] roles;
+  (match List.nth wire 1 with
+   | `Assoc _ as obj ->
+     (match (Yojson.Safe.Util.member "tool_calls" obj |> Yojson.Safe.Util.to_list) with
+      | [entry] ->
+        let fn = Yojson.Safe.Util.member "function" entry in
+        Alcotest.(check string) "tool call name" "Bash"
+          (Yojson.Safe.Util.member "name" fn
+             |> Yojson.Safe.Util.to_string)
+      | _ -> Alcotest.fail "expected one tool call")
+   | _ -> Alcotest.fail "expected an assistant object");
+  (match List.nth wire 2 with
+   | `Assoc _ as obj ->
+     Alcotest.(check string) "tool_call_id" "call_1"
+       (Yojson.Safe.Util.member "tool_call_id" obj
+          |> Yojson.Safe.Util.to_string)
+   | _ -> Alcotest.fail "expected a tool object")
+
+(* === Config.create: provider-conditional key handling === *)
+
+let with_isolated_home f =
+  let tmp_home = Filename.temp_dir "camel_cfg_create" "" in
+  let old_home = Sys.getenv_opt "HOME" in
+  Unix.putenv "HOME" tmp_home;
+  let r = f () in
+  (match old_home with Some h -> Unix.putenv "HOME" h | None -> ());
+  ignore (Sys.command (Printf.sprintf "rm -rf %s" (Filename.quote tmp_home)));
+  r
+
+let test_config_create_openai () =
+  (match Sys.getenv_opt "ANTHROPIC_API_KEY" with
+   | Some _ -> Alcotest.skip ()
+   | None ->
+     with_isolated_home (fun () ->
+       let threw =
+         try ignore (Config.create ~provider:Config.OpenAI ()); false
+         with Failure _ -> true
+       in
+       Alcotest.(check bool) "openai requires --base-url" true threw;
+       let cfg =
+         Config.create ~provider:Config.OpenAI
+           ~base_url:"http://localhost:8090/v1" ()
+       in
+       Alcotest.(check string) "placeholder key" "local" cfg.api_key;
+       Alcotest.(check bool) "provider recorded" true
+         (cfg.provider = Config.OpenAI)))
+
+let test_config_create_explicit_key () =
+  with_isolated_home (fun () ->
+    let cfg =
+      Config.create ~api_key:"sk-test" ~provider:Config.OpenAI
+        ~base_url:"http://localhost:8090/v1" ()
+    in
+    Alcotest.(check string) "explicit key kept" "sk-test" cfg.api_key)
 
 let () =
   Alcotest.run "camel" [
@@ -803,6 +1168,28 @@ let () =
       Alcotest.test_case "model" `Quick test_args_model;
       Alcotest.test_case "flags" `Quick test_args_flags;
       Alcotest.test_case "resume" `Quick test_args_resume;
+      Alcotest.test_case "provider+base_url" `Quick test_args_provider;
+    ];
+    "streaming_openai", [
+      Alcotest.test_case "text_accumulation" `Quick test_oai_text_accumulation;
+      Alcotest.test_case "single_tool_call" `Quick test_oai_single_tool_call;
+      Alcotest.test_case "two_tool_calls_interleaved" `Quick test_oai_two_tool_calls_interleaved;
+      Alcotest.test_case "finish_reasons" `Quick test_oai_finish_reasons;
+      Alcotest.test_case "usage_final_chunk" `Quick test_oai_usage_final_chunk;
+      Alcotest.test_case "done_sentinel" `Quick test_oai_done_sentinel;
+      Alcotest.test_case "inband_error" `Quick test_oai_inband_error;
+      Alcotest.test_case "full_completion" `Quick test_oai_full_completion;
+    ];
+    "query_openai", [
+      Alcotest.test_case "endpoint_normalization" `Quick test_oai_endpoint_normalization;
+      Alcotest.test_case "error_check" `Quick test_oai_error_check;
+      Alcotest.test_case "build_body_shape" `Quick test_oai_build_body_shape;
+      Alcotest.test_case "build_body_tool_filter" `Quick test_oai_build_body_tool_filter;
+      Alcotest.test_case "tool_result_expansion" `Quick test_oai_tool_result_expansion;
+    ];
+    "config_create", [
+      Alcotest.test_case "openai_key_defaulting" `Quick test_config_create_openai;
+      Alcotest.test_case "explicit_key" `Quick test_config_create_explicit_key;
     ];
     "streaming", [
       Alcotest.test_case "ping" `Quick test_sse_ping;

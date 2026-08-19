@@ -38,9 +38,9 @@ let build_body ~(config : Config.t) ~messages ~system_prompt ~tool_filter =
   let parts = ("messages", `List msgs) :: parts in
   Yojson.Safe.to_string (`Assoc (List.rev parts))
 
-(** Stream a message from the API with tools.
+(** Stream a message from the Anthropic Messages API with tools.
     Shows a spinner while waiting for first token. *)
-let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ?(tool_filter = None) ~on_text () =
+let stream_with_tools_anthropic ~(config : Config.t) ~messages ?(system_prompt = None) ?(tool_filter = None) ~on_text () =
   let body = build_body ~config ~messages ~system_prompt ~tool_filter in
   let url = Printf.sprintf "%s/v1/messages" config.base_url in
   let acc = Streaming.create_accumulator () in
@@ -152,6 +152,14 @@ let stream_with_tools ~(config : Config.t) ~messages ?(system_prompt = None) ?(t
 
   (* Finalize — tool names are resolved inside Streaming.finalize via acc.tool_names *)
   Streaming.finalize acc
+
+(** Provider dispatch: Anthropic Messages API or OpenAI-compatible. *)
+let stream_with_tools ~(config : Config.t) ~messages ?system_prompt ?tool_filter ~on_text () =
+  match config.provider with
+  | Config.OpenAI ->
+    Query_openai.stream_with_tools ~config ~messages ?system_prompt ?tool_filter ~on_text ()
+  | Config.Anthropic ->
+    stream_with_tools_anthropic ~config ~messages ?system_prompt ?tool_filter ~on_text ()
 
 (** Check if an error message is retryable (rate limit or overload). *)
 let is_retryable_error msg =

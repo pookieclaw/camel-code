@@ -1,10 +1,17 @@
 (** Configuration management. *)
 
+type provider = Anthropic | OpenAI
+
+let provider_to_string = function
+  | Anthropic -> "anthropic"
+  | OpenAI -> "openai"
+
 type t = {
   api_key : string;
   model : string;
   max_tokens : int;
   base_url : string;
+  provider : provider;
   fallback_model : string option;
   fallback_api_key : string option;
 }
@@ -38,13 +45,25 @@ let load_api_key () =
        | _ -> None)
     | None -> None
 
-let create ?api_key ?model ?max_tokens ?base_url () =
+let create ?api_key ?model ?max_tokens ?base_url ?provider () =
+  let provider = Option.value provider ~default:Anthropic in
+  let base_url = match base_url with
+    | Some u -> u
+    | None ->
+      (match provider with
+       | Anthropic -> default_base_url
+       | OpenAI ->
+         failwith "OpenAI-compatible provider requires an explicit --base-url (e.g. http://localhost:8090/v1)")
+  in
   let api_key = match api_key with
     | Some k -> k
     | None ->
       match load_api_key () with
       | Some k -> k
-      | None -> failwith "No API key. Set ANTHROPIC_API_KEY or add to ~/.camel/config.json"
+      | None ->
+        (match provider with
+         | Anthropic -> failwith "No API key. Set ANTHROPIC_API_KEY or add to ~/.camel/config.json"
+         | OpenAI -> "local")
   in
   let json = load_config_json () in
   let get_str key = match json with
@@ -63,7 +82,8 @@ let create ?api_key ?model ?max_tokens ?base_url () =
     api_key;
     model = Option.value model ~default:default_model;
     max_tokens = Option.value max_tokens ~default:default_max_tokens;
-    base_url = Option.value base_url ~default:default_base_url;
+    base_url;
+    provider;
     fallback_model;
     fallback_api_key;
   }
