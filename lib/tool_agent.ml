@@ -12,9 +12,9 @@ let is_read_only = false
 let is_concurrent_safe = true
 
 (** Function ref for running a tooled query loop. Set at startup to break cycle. *)
-let run_query_fn : (config:Config.t -> messages:Message.message list -> auto_approve:bool ->
+let run_query_fn : (config:Config.t -> messages:Message.message list ->
   cost_tracker:Cost_tracker.t -> ?system_prompt:string -> unit -> Message.message list) ref =
-  ref (fun ~config:_ ~messages:_ ~auto_approve:_ ~cost_tracker:_ ?system_prompt:_ () ->
+  ref (fun ~config:_ ~messages:_ ~cost_tracker:_ ?system_prompt:_ () ->
     failwith "Agent query function not wired — call Tool_agent.set_run_query first")
 
 let set_run_query fn = run_query_fn := fn
@@ -40,7 +40,7 @@ let execute ~input ~cwd =
     "You are a research subagent. Use Read, Grep, and Glob tools to investigate. Working directory: %s"
     cwd in
   let msgs = [Message.{ role = User; content = [Text prompt] }] in
-  let final_msgs = !run_query_fn ~config ~messages:msgs ~auto_approve:true
+  let final_msgs = !run_query_fn ~config ~messages:msgs
     ~cost_tracker:ct ~system_prompt () in
   let response = List.fold_left (fun acc (m : Message.message) ->
     if m.role = Assistant then acc ^ Message.message_text m else acc

@@ -28,7 +28,7 @@ let send_response oc json =
   flush oc
 
 (** Handle a single client command. Returns false to shut down. *)
-let handle_command ~config ~auto_approve json =
+let handle_command ~config json =
   let open Yojson.Safe.Util in
   let method_ = try json |> member "method" |> to_string with _ -> "" in
   let params = match member "params" json with `Null -> `Assoc [] | p -> p in
@@ -43,7 +43,7 @@ let handle_command ~config ~auto_approve json =
       let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
       let msgs = [Message.{ role = User; content = [Text prompt] }] in
       let final_msgs =
-        try Query.run ~config ~messages:msgs ~auto_approve ~cost_tracker:ct ?system_prompt ()
+         try Query.run ~config ~messages:msgs ~cost_tracker:ct ?system_prompt ()
         with Failure e -> [Message.{ role = Assistant; content = [Text (Printf.sprintf "Error: %s" e)] }]
       in
       let response_text = List.fold_left (fun acc (m : Message.message) ->
@@ -73,7 +73,7 @@ let handle_command ~config ~auto_approve json =
     (`Assoc [("error", `String (Printf.sprintf "unknown method: %s" method_))], true)
 
 (** Handle a single client connection. *)
-let handle_client ~config ~auto_approve fd =
+let handle_client ~config fd =
   let ic = Unix.in_channel_of_descr fd in
   let oc = Unix.out_channel_of_descr fd in
   let keep_running = ref true in
@@ -84,7 +84,7 @@ let handle_client ~config ~auto_approve fd =
       if String.length line > 0 then begin
         match (try Some (Yojson.Safe.from_string line) with _ -> None) with
         | Some json ->
-          let (response, continue) = handle_command ~config ~auto_approve json in
+           let (response, continue) = handle_command ~config json in
           send_response oc response;
           if not continue then keep_running := false
         | None ->
@@ -100,7 +100,7 @@ let handle_client ~config ~auto_approve fd =
   !keep_running
 
 (** Start the daemon, listening on a Unix socket. *)
-let start ~(config : Config.t) ~auto_approve () =
+let start ~(config : Config.t) () =
   let path = socket_path () in
 
   (* Ensure parent directory exists *)
@@ -139,7 +139,7 @@ let start ~(config : Config.t) ~auto_approve () =
     let (client_fd, _addr) = Unix.accept sock in
     Printf.printf "%s Client connected\n" (dim "·");
     flush stdout;
-    let continue = handle_client ~config ~auto_approve client_fd in
+    let continue = handle_client ~config client_fd in
     if not continue then begin
       Printf.printf "%s Shutdown requested\n" (dim "·");
       running := false

@@ -463,7 +463,7 @@ let test_tool_filter_sorted () =
 let test_agent_fn_ref_default_fails () =
   (* Before wiring, calling the ref should fail *)
   let original = !Tool_agent.run_query_fn in
-  Tool_agent.run_query_fn := (fun ~config:_ ~messages:_ ~auto_approve:_ ~cost_tracker:_ ?system_prompt:_ () ->
+  Tool_agent.run_query_fn := (fun ~config:_ ~messages:_ ~cost_tracker:_ ?system_prompt:_ () ->
     failwith "not wired");
   let config = Config.{
     api_key = "k"; model = "m"; max_tokens = 100; base_url = "http://x";
@@ -472,7 +472,7 @@ let test_agent_fn_ref_default_fails () =
   } in
   let ct = Cost_tracker.create ~model:"m" in
   let threw = try
-    ignore (!Tool_agent.run_query_fn ~config ~messages:[] ~auto_approve:true ~cost_tracker:ct ());
+    ignore (!Tool_agent.run_query_fn ~config ~messages:[] ~cost_tracker:ct ());
     false
   with Failure _ -> true in
   Alcotest.(check bool) "unwired ref fails" true threw;
@@ -480,7 +480,7 @@ let test_agent_fn_ref_default_fails () =
 
 let test_agent_set_run_query () =
   let called = ref false in
-  let fake_run ~config:_ ~messages ~auto_approve:_ ~cost_tracker:_ ?system_prompt:_ () =
+  let fake_run ~config:_ ~messages ~cost_tracker:_ ?system_prompt:_ () =
     called := true;
     messages @ [Message.{ role = Assistant; content = [Text "agent response"] }]
   in
@@ -492,7 +492,7 @@ let test_agent_set_run_query () =
   } in
   let ct = Cost_tracker.create ~model:"m" in
   let msgs = [Message.{ role = User; content = [Text "test"] }] in
-  let result = !Tool_agent.run_query_fn ~config ~messages:msgs ~auto_approve:true ~cost_tracker:ct () in
+  let result = !Tool_agent.run_query_fn ~config ~messages:msgs ~cost_tracker:ct () in
   Alcotest.(check bool) "fn was called" true !called;
   Alcotest.(check int) "got 2 messages back" 2 (List.length result)
 
@@ -755,7 +755,7 @@ let test_daemon_status_command () =
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "status")] in
-  let (response, continue) = Daemon.handle_command ~config ~auto_approve:true json in
+  let (response, continue) = Daemon.handle_command ~config json in
   Alcotest.(check bool) "continues" true continue;
   let open Yojson.Safe.Util in
   Alcotest.(check string) "status running" "running" (response |> member "status" |> to_string);
@@ -768,7 +768,7 @@ let test_daemon_shutdown_command () =
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "shutdown")] in
-  let (_response, continue) = Daemon.handle_command ~config ~auto_approve:true json in
+  let (_response, continue) = Daemon.handle_command ~config json in
   Alcotest.(check bool) "stops" false continue
 
 let test_daemon_unknown_method () =
@@ -778,7 +778,7 @@ let test_daemon_unknown_method () =
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "bogus")] in
-  let (response, continue) = Daemon.handle_command ~config ~auto_approve:true json in
+  let (response, continue) = Daemon.handle_command ~config json in
   Alcotest.(check bool) "continues" true continue;
   let open Yojson.Safe.Util in
   let err = response |> member "error" |> to_string in
@@ -791,7 +791,7 @@ let test_daemon_query_missing_prompt () =
     fallback_model = None; fallback_api_key = None;
   } in
   let json = `Assoc [("method", `String "query"); ("params", `Assoc [])] in
-  let (response, _) = Daemon.handle_command ~config ~auto_approve:true json in
+  let (response, _) = Daemon.handle_command ~config json in
   let open Yojson.Safe.Util in
   Alcotest.(check string) "missing prompt error" "missing prompt"
     (response |> member "error" |> to_string)
@@ -1149,6 +1149,63 @@ let test_config_create_explicit_key () =
     in
     Alcotest.(check string) "explicit key kept" "sk-test" cfg.api_key)
 
+(* === Mode: runtime permission mode === *)
+
+let contains_str hay needle =
+  try ignore (Str.search_forward (Str.regexp_string needle) hay 0); true
+  with Not_found -> false
+
+let test_mode_parse () =
+  Alcotest.(check (option string)) "parse ask" (Some "ask")
+    (match Mode.parse "ask" with Some m -> Some (Mode.to_string m) | None -> None);
+  Alcotest.(check (option string)) "parse read-only" (Some "read-only")
+    (match Mode.parse "read-only" with Some m -> Some (Mode.to_string m) | None -> None);
+  Alcotest.(check (option string)) "parse auto case-insensitive" (Some "auto")
+    (match Mode.parse "AUTO" with Some m -> Some (Mode.to_string m) | None -> None);
+  Alcotest.(check (option string)) "parse invalid" None
+    (match Mode.parse "warp" with Some m -> Some (Mode.to_string m) | None -> None)
+
+let test_mode_cycle_order () =
+  let saved = Mode.get () in
+  Mode.set Mode.Ask;
+  Mode.cycle ();
+  Alcotest.(check string) "ask->read-only" "read-only" (Mode.to_string (Mode.get ()));
+  Mode.cycle ();
+  Alcotest.(check string) "read-only->auto" "auto" (Mode.to_string (Mode.get ()));
+  Mode.cycle ();
+  Alcotest.(check string) "auto->ask" "ask" (Mode.to_string (Mode.get ()));
+  Mode.set saved
+
+let test_mode_dispatch_cycle () =
+  let saved = Mode.get () in
+  Mode.set Mode.Auto;
+  let ct = Cost_tracker.create ~model:"m" in
+  (match Commands.dispatch "/mode" ~messages:[] ~cost_tracker:ct with
+   | Some (Commands.ShowMessage s) ->
+     Alcotest.(check bool) "message shows the transition" true
+       (contains_str s "auto -> ask");
+     Alcotest.(check string) "state advanced to ask" "ask" (Mode.to_string (Mode.get ()))
+   | Some _ -> Alcotest.(check string) "unexpected result" "" "unexpected"
+   | None -> Alcotest.(check string) "not dispatched" "" "no");
+  Mode.set saved
+
+let test_mode_dispatch_explicit () =
+  let saved = Mode.get () in
+  let ct = Cost_tracker.create ~model:"m" in
+  (match Commands.dispatch "/mode auto" ~messages:[] ~cost_tracker:ct with
+   | Some (Commands.ShowMessage s) ->
+     Alcotest.(check bool) "message confirms set" true (contains_str s "Mode set to: auto");
+     Alcotest.(check string) "state is auto" "auto" (Mode.to_string (Mode.get ()))
+   | Some _ -> Alcotest.(check string) "unexpected result" "" "unexpected"
+   | None -> Alcotest.(check string) "not dispatched" "" "no");
+  (match Commands.dispatch "/mode bogus" ~messages:[] ~cost_tracker:ct with
+   | Some (Commands.ShowMessage s) ->
+     Alcotest.(check bool) "invalid reported" true (contains_str s "Invalid mode");
+     Alcotest.(check string) "state unchanged" "auto" (Mode.to_string (Mode.get ()))
+   | Some _ -> Alcotest.(check string) "unexpected result" "" "unexpected"
+   | None -> Alcotest.(check string) "not dispatched" "" "no");
+  Mode.set saved
+
 let () =
   Alcotest.run "camel" [
     "basics", [
@@ -1297,5 +1354,11 @@ let () =
       Alcotest.test_case "shutdown" `Quick test_daemon_shutdown_command;
       Alcotest.test_case "unknown_method" `Quick test_daemon_unknown_method;
       Alcotest.test_case "missing_prompt" `Quick test_daemon_query_missing_prompt;
+    ];
+    "mode", [
+      Alcotest.test_case "parse" `Quick test_mode_parse;
+      Alcotest.test_case "cycle_order" `Quick test_mode_cycle_order;
+      Alcotest.test_case "dispatch_cycle" `Quick test_mode_dispatch_cycle;
+      Alcotest.test_case "dispatch_explicit" `Quick test_mode_dispatch_explicit;
     ];
   ]

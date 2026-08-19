@@ -38,7 +38,7 @@ let ask_permission ~tool_name ~description =
   with End_of_file -> false
 
 (** Execute a single tool use block. *)
-let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
+let execute_tool ~cwd tool_use_id tool_name input =
   match Tool_registry.find_tool tool_name with
   | None ->
     Printf.printf "  %s Unknown tool: %s\n" (red "!") tool_name;
@@ -55,7 +55,12 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
     Printf.printf "\n  \xE2\x8E\xBF %s %s\n" (cyan "\xE2\x97\x8F") (bold (cyan desc));
     flush stdout;
 
-    (* Check permission *)
+    (* Check permission — resolve the live mode at call time *)
+    let auto_approve = match Mode.get () with
+      | Mode.Ask -> false
+      | Mode.Auto -> true
+      | Mode.AutoReadOnly -> T.is_read_only
+    in
     let allowed = match T.check_permission ~input ~auto_approve with
       | Allow -> true
       | Deny reason ->
@@ -128,10 +133,10 @@ let execute_tool ~auto_approve ~cwd tool_use_id tool_name input =
     end
 
 (** Execute all tool uses from an assistant message. *)
-let execute_all ~auto_approve ~cwd (msg : Message.message) =
+let execute_all ~cwd (msg : Message.message) =
   List.filter_map (fun block ->
     match block with
     | Message.ToolUse { id; name; input } ->
-      Some (execute_tool ~auto_approve ~cwd id name input)
+      Some (execute_tool ~cwd id name input)
     | _ -> None
   ) msg.content

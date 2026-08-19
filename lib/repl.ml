@@ -32,8 +32,8 @@ let term_width () =
   ignore (Unix.close_process_in ic);
   w
 
-let print_banner ~model ~auto_approve =
-  let mode_str = if auto_approve then "auto" else "ask" in
+let print_banner ~model =
+  let mode_str = Mode.to_string (Mode.get ()) in
   let branch_str = match git_branch () with
     | Some b -> " / " ^ b | None -> "" in
   let user = whoami () in
@@ -138,8 +138,8 @@ let reset_terminal () =
 
 let last_interrupt = ref 0.0
 
-let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
-  print_banner ~model:config.model ~auto_approve;
+let run ~(config : Config.t) ?(initial_messages = []) () =
+  print_banner ~model:config.model;
   let ct = Cost_tracker.create ~model:config.model in
   let session_id = Session.generate_id () in
   let tools = Tool_registry.tool_names () in
@@ -206,11 +206,11 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
          echo_input ~tw input_clean;
          let user_msg = Message.{ role = User; content = [Text input_clean] } in
          msgs := !msgs @ [user_msg];
-         msgs := Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ();
+          msgs := Query.run ~config ~messages:!msgs ~cost_tracker:ct ?system_prompt ();
          Printf.printf "\n";
          thin_line ~w:(min 60 tw);
          Printf.printf "\n";
-         let mode_label = if auto_approve then "auto-approve on" else "ask mode" in
+          let mode_label = Mode.status_label (Mode.get ()) in
          Printf.printf "  %s %s   %s   %s\n\n"
            (dim "\xE2\x97\x8F") (dim mode_label) (dim "/help") (yellow (Printf.sprintf "%s" config.model));
          Session.save ~id:session_id ~model:config.model ~messages:!msgs ())
@@ -218,7 +218,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
 
   Printf.printf "\n%s\n" (dim (Cost_tracker.summary ct))
 
-let run_single ~config ~prompt ~auto_approve =
+let run_single ~config ~prompt =
   let ct = Cost_tracker.create ~model:config.Config.model in
   let tools = Tool_registry.tool_names () in
   let system_prompt = Some (System_prompt.build ~model:config.model ~tools) in
@@ -235,7 +235,7 @@ let run_single ~config ~prompt ~auto_approve =
   ));
 
   let _final_msgs =
-    try Query.run ~config ~messages:msgs ~auto_approve ~cost_tracker:ct ?system_prompt ()
+     try Query.run ~config ~messages:msgs ~cost_tracker:ct ?system_prompt ()
     with Failure msg ->
       Printf.eprintf "\027[31mError:\027[0m %s\n" msg;
       exit 1

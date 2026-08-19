@@ -6,10 +6,10 @@
 let last_interrupt = ref 0.0
 
 (** Run the TUI REPL. Falls back to basic REPL if not a terminal. *)
-let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
+let run ~(config : Config.t) ?(initial_messages = []) () =
   let is_tty = Unix.isatty Unix.stdin in
   if not is_tty then begin
-    Repl.run ~config ~auto_approve ~initial_messages ()
+    Repl.run ~config ~initial_messages ()
   end else begin
     let layout = Tui_layout.create () in
     let ct = Cost_tracker.create ~model:config.model in
@@ -103,7 +103,7 @@ let run ~(config : Config.t) ~auto_approve ?(initial_messages = []) () =
           Tui_ansi.restore_mode old_termios;
 
           msgs := (try
-            Query.run ~config ~messages:!msgs ~auto_approve ~cost_tracker:ct ?system_prompt ()
+            Query.run ~config ~messages:!msgs ~cost_tracker:ct ?system_prompt ()
           with Failure msg ->
             Printf.printf "\n\027[31mError:\027[0m %s\n" msg;
             flush stdout;

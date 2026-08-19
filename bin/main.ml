@@ -44,8 +44,8 @@ let () =
   Feature_flags.init ();
 
   (* Wire up agent tool's query function ref to break dependency cycle *)
-  Tool_agent.set_run_query (fun ~config ~messages ~auto_approve ~cost_tracker ?system_prompt () ->
-    Query.run ~config ~messages ~auto_approve ~cost_tracker ?system_prompt
+  Tool_agent.set_run_query (fun ~config ~messages ~cost_tracker ?system_prompt () ->
+    Query.run ~config ~messages ~cost_tracker ?system_prompt
       ~tool_filter:["Read"; "Grep"; "Glob"] ());
 
   (* Doctor commands don't need an API key — handle before config *)
@@ -116,18 +116,22 @@ let () =
       end else []
   in
 
+  (* Map the -y/--yes flag to the initial permission mode. The mode itself is
+      mutable at runtime (Mode), togglable in-session via /mode. *)
+  Mode.set (if args.yes then Mode.Auto else Mode.Ask);
+
   match args.prompt with
   | Some "__doctor__" ->
     Doctor.run_all ()
   | Some "__doctor_fix__" ->
     Doctor.run_fix ()
   | Some "__daemon__" ->
-    Daemon.start ~config ~auto_approve:args.yes ()
+    Daemon.start ~config ()
   | Some "__login__" ->
     (match Oauth.login () with
      | Some _ -> Printf.printf "Login successful!\n"
      | None -> Printf.printf "Login failed.\n"; exit 1)
   | Some prompt ->
-    Repl.run_single ~config ~prompt ~auto_approve:args.yes
+    Repl.run_single ~config ~prompt
   | None ->
-    Repl.run ~config ~auto_approve:args.yes ~initial_messages ()
+    Repl.run ~config ~initial_messages ()

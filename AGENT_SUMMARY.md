@@ -114,3 +114,99 @@ provider-agnostic `Message`/`Tool_registry` layers keep the architecture
 open: a future provider plugs in as another `(lib/streaming_X.ml,
 lib/query_X.ml)` pair plus a `Config.provider` constructor, without touching
 the agentic loop, tool execution, sessions, or permissions.
+
+---
+
+# Agent Summary — In-session permission-mode toggle
+
+## What was built
+
+The permission mode (`auto_approve`) was a value bound once at launch and
+threaded by plain parameter. It is now live mutable state, togglable from a
+running session with no restart.
+
+- **`lib/mode.ml` (`Mode`)** — new module holding the single mutable mode
+  (`ref`): `Ask` | `AutoReadOnly` | `Auto`, plus `set`/`get`/`cycle`/
+  `parse`/`to_string`/`status_label`. `bin/main.ml` maps the `-y`/`--yes`
+  flag to the *initial* mode before dispatch; from then on the only writer
+  inside a session is `/mode`.
+- **`lib/tool_executor.ml`** — the single choke point. `execute_all`/
+  `execute_tool` no longer take `auto_approve`; at call time each tool call
+  resolves the live mode: `Ask` → never auto-approve, `Auto` → always,
+  `AutoReadOnly` → only when the tool's own `is_read_only` declaration is
+  true (the flag already present on the tool interface, so no interface
+  change — every tool, including MCP-registered ones, inherits live
+  behavior through the one bool at the boundary).
+- **Parameter chain removed end-to-end**: `Query.run`, `Repl.run`,
+  `Repl.run_single`, `Tui_app.run`, `Daemon.start`/`handle_client`/
+  `handle_command`, `Coordinator.assign_task`, and the `Tool_agent`
+  subagent query-function signature all dropped the captured bool. Every
+  code path now reads the shared state at decision time; nothing captures
+  the old static value. Subagents are filtered to Read/Grep/Glob (all
+  unconditional-`Allow`), so inheriting the live mode cannot prompt them.
+- **`/mode` command** (`lib/commands.ml`) — bare `/mode` cycles
+  `ask → read-only → auto → ask`; `/mode ask|read-only|auto` (aliases:
+  `readonly`, `approve`, `yes`, case-insensitive) sets explicitly; invalid
+  args report usage without changing state. Listed under Model & Config in
+  `/help`.
+- **Live status** (`lib/repl.ml`) — the banner's mode tag and the
+  post-turn status line (`ask mode` / `read-only auto` / `auto-approve on`)
+  read `Mode` at render time, so the UI can no longer lie about the active
+  mode.
+- **Keybinding** — deliberately not added: `lib/keybindings.ml` is inert
+  data with no action dispatcher anywhere in the tree, and binding
+  Shift+Tab would require building a new keypress-dispatch subsystem,
+  which the task explicitly rules out. The slash command is the mechanism.
+
+The optional third mode was included because the state model needed zero
+additional complexity for it (same single variable, same single decision
+point) and its semantics — auto-approve per each tool's declared
+`is_read_only`, ask otherwise — are exactly the task's definition. In this
+codebase the file tools (Read/Grep/Glob) already never prompt, so today the
+mode's practical delta over `ask` is limited to declared-read-only tools
+with conditional checks (e.g. WebFetch); it becomes substantive as more
+conditional tools declare read-only-ness.
+
+**Tests** — four new cases in a `mode` suite (parse/aliases, cycle order,
+bare-`/mode` dispatch transitions state and reports it, explicit set +
+invalid-arg rejection), plus signature updates to the existing agent-wiring
+and daemon suites.
+
+## Verification performed
+
+- `dune build` — clean.
+- `dune runtest` — all tests pass (85 run; fff_live skips are pre-existing
+  environment skips).
+- **Live toggle test (passed)** — one interactive session against the
+  local server (`aria` @ `http://localhost:8090/v1`), no restart:
+  1. Session opened in ask mode (banner: `ask · aria / main`); first bash
+     call prompted `Allow Bash?`, answered `y`, executed.
+  2. `/mode` → `Mode: ask -> read-only`; `/mode` → `Mode: read-only ->
+     auto`.
+  3. Second bash call (`whoami`) executed with **no prompt**; status line
+     read `auto-approve on`.
+  4. `/mode ask` → `Mode set to: ask — ask before every tool call`.
+  5. Third bash call (`id -u`) **prompted again**, answered `y`.
+- **Denial-path check (passed)** — `/mode read-only`, then a bash call
+  still prompted (Bash is declared non-read-only) and answering `n`
+  produced `denied` with the result fed back to the model.
+
+Exact commands used:
+
+```
+printf '...<tool request>\ny\n/mode\n/mode\n...<tool request>\n/mode ask\n...<tool request>\ny\n/exit\n' \
+  | dune exec bin/main.exe -- --provider ollama --base-url http://localhost:8090/v1 -m aria
+
+printf '/mode read-only\n...<tool request>\nn\n/exit\n' \
+  | dune exec bin/main.exe -- --provider ollama --base-url http://localhost:8090/v1 -m aria
+```
+
+## Known limitations
+
+- The mode is process-global: daemon-mode clients and any future
+  concurrent execution paths share one mode value (there is no per-client
+  state). Adequate for the single-interactive-session scope; a per-session
+  scoping would be the follow-up if daemon multi-client use matters.
+- `read-only` mode today mostly overlaps `ask` because the file tools are
+  already unconditional-`Allow`; its observable effect is confined to
+  declared-read-only tools with conditional checks.

@@ -168,7 +168,7 @@ let is_retryable_error msg =
     ["rate limit"; "overloaded"; "529"; "too many requests"; "capacity"]
 
 (** Main agentic query loop. *)
-let run ~(config : Config.t) ~messages ~auto_approve ~cost_tracker ?system_prompt ?tool_filter () =
+let run ~(config : Config.t) ~messages ~cost_tracker ?system_prompt ?tool_filter () =
   let msgs = ref messages in
   let active_config = ref config in
 
@@ -247,7 +247,7 @@ let run ~(config : Config.t) ~messages ~auto_approve ~cost_tracker ?system_promp
     if has_tool_use response then begin
       Printf.printf "\n";
       let cwd = Sys.getcwd () in
-      let results = Tool_executor.execute_all ~auto_approve ~cwd response in
+      let results = Tool_executor.execute_all ~cwd response in
       let result_msg = Message.{ role = User; content = results } in
       msgs := !msgs @ [result_msg];
       loop ()

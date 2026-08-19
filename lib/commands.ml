@@ -39,8 +39,9 @@ let cmd_help = {
        /stats        Session statistics\n\
        /exit         Exit camel\n\
        \n\
-       Model & Config:\n\
-       /model [name] Show or change model\n\
+        Model & Config:\n\
+        /model [name] Show or change model\n\
+        /mode [name]  Cycle or set permission mode (ask/read-only/auto)\n\
        /config       Show settings\n\
        /effort [lvl] Set reasoning effort (low/medium/high)\n\
        /fast         Toggle fast mode\n\
@@ -119,6 +120,30 @@ let cmd_model = {
       SwitchModel arg
     else
       ShowMessage "Models:\n  claude-sonnet-4-20250514 (default)\n  claude-opus-4-20250514\n  claude-haiku-4-5-20251001\n\nUsage: /model <name>"
+}
+
+let cmd_mode = {
+  name = "mode";
+  description = "Show or cycle permission mode (ask / read-only / auto)";
+  execute = fun ~args ~messages:_ ~cost_tracker:_ ->
+    let arg = String.trim args in
+    if String.length arg > 0 then begin
+      (match Mode.parse arg with
+       | Some m ->
+         Mode.set m;
+         ShowMessage (Printf.sprintf "Mode set to: %s — %s" (Mode.to_string m) (Mode.describe m))
+       | None -> ShowMessage "Invalid mode. Usage: /mode <ask|read-only|auto> (no argument cycles)")
+    end else begin
+      let old_m = Mode.get () in
+      Mode.cycle ();
+      let new_m = Mode.get () in
+      ShowMessage (Printf.sprintf
+        "Mode: %s -> %s\n%s\n\nModes:\n  ask        %s\n  read-only  %s\n  auto       %s"
+        (Mode.to_string old_m) (Mode.to_string new_m) (Mode.describe new_m)
+        (Mode.describe Mode.Ask)
+        (Mode.describe Mode.AutoReadOnly)
+        (Mode.describe Mode.Auto))
+    end
 }
 
 let cmd_config = {
@@ -492,7 +517,7 @@ let all_commands = [
   cmd_help; cmd_clear; cmd_compact; cmd_cost; cmd_stats;
   cmd_exit; cmd_quit;
   (* Model & Config *)
-  cmd_model; cmd_config; cmd_effort; cmd_fast; cmd_theme; cmd_vim; cmd_version;
+  cmd_model; cmd_mode; cmd_config; cmd_effort; cmd_fast; cmd_theme; cmd_vim; cmd_version;
   (* Session *)
   cmd_session; cmd_resume; cmd_export; cmd_memory;
   (* Git *)
