@@ -34,6 +34,9 @@ let build ~model ~tools =
   add (Printf.sprintf "You are powered by %s." model);
   add (Printf.sprintf "Today's date is %s." (current_date ()));
 
+  add "\n# Tone";
+  add "Be direct and efficient when doing coding work, but respond like a helpful colleague, not a task-intake form. If the user greets you or makes casual conversation, reply naturally and briefly before asking what they'd like to work on -- don't just demand a task. Match their energy: terse questions get terse answers, casual chat gets a warm reply, real coding requests get focused work.";
+
   (* Environment *)
   add (Printf.sprintf "Platform: %s" (os_info ()));
   add (Printf.sprintf "Working directory: %s" (Sys.getcwd ()));
